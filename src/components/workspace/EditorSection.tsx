@@ -74,7 +74,7 @@ export function EditorSection({
   return (
     <div className="mb-6 bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden group flex flex-col">
       <div className={`px-4 py-3 border-b flex justify-between items-center shrink-0 transition-colors ${
-        isModified ? 'bg-amber-50/80 border-amber-200' : 'bg-slate-50/80 border-slate-200'
+        isModified ? 'bg-emerald-50/70 border-emerald-200' : 'bg-slate-50/80 border-slate-200'
       }`}>
         <div className="flex items-center gap-3">
           <h3 className="font-semibold text-slate-800 text-[13px]">{title}</h3>
@@ -84,7 +84,7 @@ export function EditorSection({
             <Badge color="orange"><AlertTriangle size={10} className="mr-1 inline" />Flagged</Badge>
           )}
           {isModified && (
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-700 border border-amber-200">
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-700 border border-emerald-200">
               已修改
             </span>
           )}
@@ -116,7 +116,7 @@ export function EditorSection({
                 isRegenerating ? 'opacity-40' : 'opacity-100'
               } ${
                 isModified
-                  ? 'border-2 border-amber-400 bg-amber-50/40 text-slate-800 focus:ring-2 focus:ring-amber-100 focus:border-amber-500'
+                  ? 'border-2 border-emerald-400 bg-emerald-50/30 text-slate-800 focus:ring-2 focus:ring-emerald-100 focus:border-emerald-500'
                   : 'border border-slate-200 bg-slate-50/30 text-slate-800 focus:ring-2 focus:ring-blue-100 focus:border-[#0052D9]'
               }`}
               value={value}
@@ -125,20 +125,40 @@ export function EditorSection({
             />
           </div>
           {showBaselineDiff && (
-            <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50/70 p-2.5">
-              <p className="text-[10px] font-semibold text-amber-900 mb-1.5 tracking-wide">
-                {t('ws.diffFromBaseline')}
-              </p>
+            <div className="mt-2 rounded-lg border border-slate-200 bg-white p-2.5">
+              <div className="flex items-center gap-2 mb-1.5">
+                <p className="text-[10px] font-semibold text-slate-700 tracking-wide">
+                  {t('ws.diffFromBaseline')}
+                </p>
+                <span className="inline-flex items-center gap-1 text-[10px] text-slate-500">
+                  <span className="inline-block w-2 h-2 rounded-sm bg-emerald-300" /> 新增/替换
+                  <span className="inline-block w-2 h-2 rounded-sm bg-rose-200 ml-1.5" /> 原文删除
+                </span>
+              </div>
               <div className="text-xs text-slate-800 whitespace-pre-wrap leading-relaxed max-h-[220px] overflow-y-auto">
-                {diffParts.map((seg, i) =>
-                  seg.changed ? (
-                    <mark key={i} className="bg-amber-300/95 text-slate-900 rounded-sm px-0.5">
-                      {seg.text}
-                    </mark>
-                  ) : (
-                    <span key={i}>{seg.text}</span>
-                  ),
-                )}
+                {diffParts.map((seg, i) => {
+                  if (seg.op === 'insert') {
+                    return (
+                      <mark
+                        key={i}
+                        className="bg-emerald-100 text-emerald-900 rounded-sm px-0.5 underline decoration-emerald-400 decoration-1 underline-offset-2"
+                      >
+                        {seg.text}
+                      </mark>
+                    );
+                  }
+                  if (seg.op === 'delete') {
+                    return (
+                      <span
+                        key={i}
+                        className="bg-rose-50 text-rose-700/80 line-through decoration-rose-400 rounded-sm px-0.5"
+                      >
+                        {seg.text}
+                      </span>
+                    );
+                  }
+                  return <span key={i}>{seg.text}</span>;
+                })}
               </div>
             </div>
           )}
