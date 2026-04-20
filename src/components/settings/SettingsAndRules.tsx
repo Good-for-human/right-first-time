@@ -19,7 +19,7 @@ interface SettingsAndRulesProps {
   tasks: Task[];
   onAddCategory: () => void;
   onDeleteCategory: (name: string) => void;
-  onAddRule: (type: Rule['type']) => void;
+  onAddRule: (type: Rule['type'], category: string) => void;
   onEditRule: (rule: Rule) => void;
   onDeleteRule: (rule: Rule) => void;
   onAddPersona: () => void;

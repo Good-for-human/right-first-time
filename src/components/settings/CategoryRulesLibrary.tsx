@@ -10,7 +10,8 @@ interface CategoryRulesLibraryProps {
   archivedTasks: Task[];
   onAddCategory: () => void;
   onDeleteCategory: (name: string) => void;
-  onAddRule: (type: Rule['type']) => void;
+  /** `category` is the tab the user is on when they click Add (must match Firestore rule.category). */
+  onAddRule: (type: Rule['type'], category: string) => void;
   onEditRule: (rule: Rule) => void;
   onDeleteRule: (rule: Rule) => void;
 }
@@ -90,7 +91,7 @@ export function CategoryRulesLibrary({
                 <Edit3 size={16} className="text-[#0052D9]" /> {t('set.genRules')}
               </h4>
               <button
-                onClick={() => onAddRule('instruction')}
+                onClick={() => onAddRule('instruction', activeCategory)}
                 className="text-[#0052D9] text-xs font-semibold hover:bg-blue-100 transition flex items-center gap-1 bg-blue-50 px-2.5 py-1.5 rounded-md"
               >
                 <Plus size={14} /> {t('modal.add')}
@@ -150,7 +151,7 @@ export function CategoryRulesLibrary({
                 <ShieldAlert size={16} className="text-red-500" /> {t('set.negRules')}
               </h4>
               <button
-                onClick={() => onAddRule('negative')}
+                onClick={() => onAddRule('negative', activeCategory)}
                 className="text-red-600 text-xs font-semibold hover:bg-red-100 transition flex items-center gap-1 bg-red-50 px-2.5 py-1.5 rounded-md"
               >
                 <Plus size={14} /> {t('modal.add')}

@@ -21,7 +21,7 @@ type ModalState =
   | { type: 'addPersona' }
   | { type: 'editPersona'; persona: Persona }
   | { type: 'deletePersona'; persona: Persona }
-  | { type: 'addRule'; ruleType: Rule['type'] }
+  | { type: 'addRule'; ruleType: Rule['type']; category: string }
   | { type: 'editRule'; rule: Rule }
   | { type: 'deleteRule'; rule: Rule }
   | { type: 'addCategory' }
@@ -41,7 +41,6 @@ export default function App() {
 
   const activeTask = tasks.find((t) => t.id === activeTaskId);
   const closeModal = () => setModal({ type: 'none' });
-  const [activeSettingsCategory, setActiveSettingsCategory] = useState(categories[0] ?? '通用');
 
   // ── 1. Checking auth state ───────────────────────────────────
   if (authLoading) {
@@ -108,7 +107,7 @@ export default function App() {
             tasks={tasks}
             onAddCategory={() => setModal({ type: 'addCategory' })}
             onDeleteCategory={(name) => setModal({ type: 'deleteCategory', name })}
-            onAddRule={(ruleType) => { setActiveSettingsCategory(activeSettingsCategory); setModal({ type: 'addRule', ruleType }); }}
+            onAddRule={(ruleType, category) => setModal({ type: 'addRule', ruleType, category })}
             onEditRule={(rule) => setModal({ type: 'editRule', rule })}
             onDeleteRule={(rule) => setModal({ type: 'deleteRule', rule })}
             onAddPersona={() => setModal({ type: 'addPersona' })}
@@ -165,7 +164,7 @@ export default function App() {
           type={modal.type === 'addRule' ? modal.ruleType : modal.rule.type}
           existing={modal.type === 'editRule' ? modal.rule : undefined}
           archivedTasks={tasks.filter((t) => t.status === 'archived')}
-          category={modal.type === 'editRule' ? modal.rule.category : activeSettingsCategory}
+          category={modal.type === 'editRule' ? modal.rule.category : modal.category}
           onClose={closeModal}
           onSave={(data) => {
             if (modal.type === 'editRule') {
@@ -190,7 +189,6 @@ export default function App() {
           onClose={closeModal}
           onSave={(name) => {
             addCategory(name);
-            setActiveSettingsCategory(name);
           }}
         />
       )}
@@ -201,7 +199,6 @@ export default function App() {
           onClose={closeModal}
           onConfirm={() => {
             removeCategory(modal.name);
-            setActiveSettingsCategory(categories.find((c) => c !== modal.name) ?? '通用');
           }}
         />
       )}
