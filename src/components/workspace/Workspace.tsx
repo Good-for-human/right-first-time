@@ -1,4 +1,4 @@
-import { useState, useLayoutEffect } from 'react';
+import { useState, useLayoutEffect, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronRight, Check, Archive, Loader2, CheckCircle, AlertTriangle, X, RotateCcw } from 'lucide-react';
 import { Badge } from '@/components/ui';
@@ -127,6 +127,42 @@ export function Workspace({
     }
   }, [task?.id]);
 
+  // Debounced persistence: any manual edit (typing in AI output textareas) is written
+  // back to the task after the user pauses for 600ms, so refreshes don't drop work.
+  const persistedSnapshotRef = useRef<string>('');
+  useEffect(() => {
+    if (!task) return;
+    const snapshot = JSON.stringify(edits);
+    if (persistedSnapshotRef.current === '') {
+      persistedSnapshotRef.current = JSON.stringify(taskToEdits(task));
+    }
+    if (snapshot === persistedSnapshotRef.current) return;
+
+    const timer = setTimeout(() => {
+      const patch = listingEditsToTaskPatch(edits);
+      const current: Partial<Task> = {
+        name: task.name ?? '',
+        bullets: task.bullets ?? [],
+        description: task.description ?? '',
+      };
+      const changed =
+        patch.name !== current.name ||
+        patch.description !== current.description ||
+        JSON.stringify(patch.bullets) !== JSON.stringify(current.bullets);
+      if (changed) {
+        updateTask(task.id, patch);
+        persistedSnapshotRef.current = snapshot;
+      }
+    }, 600);
+
+    return () => clearTimeout(timer);
+  }, [edits, task?.id]);
+
+  // When the task id changes, reset the persist snapshot baseline
+  useEffect(() => {
+    persistedSnapshotRef.current = task ? JSON.stringify(taskToEdits(task)) : '';
+  }, [task?.id]);
+
   if (!task) {
     return (
       <div className="flex-1 flex items-center justify-center text-slate-400 bg-slate-50 flex-col gap-3">
@@ -206,6 +242,7 @@ export function Workspace({
       );
       const next = { title: result.title, bullets: result.bullets, description: result.description };
       setEdits(next);
+      persistedSnapshotRef.current = JSON.stringify(next);
       updateTask(task.id, listingEditsToTaskPatch(next));
     } catch (err) {
       console.error('[globalRegenerate]', err);
@@ -231,6 +268,7 @@ export function Workspace({
       );
       const next = { ...edits, [key]: result[key] };
       setEdits(next);
+      persistedSnapshotRef.current = JSON.stringify(next);
       updateTask(task.id, listingEditsToTaskPatch(next));
     } catch (err) {
       console.error('[sectionRegenerate]', err);
