@@ -43,15 +43,20 @@ export function RuleModal({ type, existing, archivedTasks, category, onClose, on
 
   const handleSave = () => {
     if (!name.trim()) return;
-    onSave({
+    const base = {
       category,
       type,
       name: name.trim(),
       targetSection,
-      priority: type === 'instruction' ? priority : undefined,
-      severity: type === 'negative' ? severity : undefined,
-      referenceAsins: type === 'instruction' ? referenceAsins : undefined,
-    });
+    } as Omit<Rule, 'id' | 'active'>;
+
+    if (type === 'instruction') {
+      base.priority = priority;
+      base.referenceAsins = referenceAsins;
+    } else {
+      base.severity = severity;
+    }
+    onSave(base);
     onClose();
   };
 

@@ -129,9 +129,29 @@ export function subscribeTasks(cb: (tasks: Task[]) => void): Unsubscribe {
   });
 }
 
+// ── Utilities ─────────────────────────────────────────────────
+/**
+ * Firestore refuses `undefined`. Recursively drop `undefined` fields from a value.
+ * Arrays / primitives pass through untouched.
+ */
+function stripUndefined<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map((v) => stripUndefined(v)) as unknown as T;
+  }
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (v === undefined) continue;
+      out[k] = stripUndefined(v);
+    }
+    return out as T;
+  }
+  return value;
+}
+
 // ── Settings mutations ────────────────────────────────────────
 export async function fsUpdateSettings(settings: AppSettings): Promise<void> {
-  await setDoc(settingsDoc(), settings);
+  await setDoc(settingsDoc(), stripUndefined(settings));
 }
 
 // ── Category mutations ────────────────────────────────────────
@@ -141,7 +161,7 @@ export function fsUpdateCategories(list: string[]): void {
 
 // ── Rule mutations ────────────────────────────────────────────
 export function fsSetRule(rule: Rule): void {
-  setDoc(doc(ruleCol(), String(rule.id)), rule).catch(console.error);
+  setDoc(doc(ruleCol(), String(rule.id)), stripUndefined(rule)).catch(console.error);
 }
 
 export function fsDeleteRule(id: number): void {
@@ -150,7 +170,7 @@ export function fsDeleteRule(id: number): void {
 
 // ── Persona mutations ─────────────────────────────────────────
 export function fsSetPersona(persona: Persona): void {
-  setDoc(doc(perCol(), persona.id), persona).catch(console.error);
+  setDoc(doc(perCol(), persona.id), stripUndefined(persona)).catch(console.error);
 }
 
 export function fsDeletePersona(id: string): void {
@@ -159,10 +179,10 @@ export function fsDeletePersona(id: string): void {
 
 // ── Task mutations ────────────────────────────────────────────
 export function fsSetTask(task: Task): void {
-  setDoc(doc(taskCol(), task.id), {
-    ...task,
-    createdAt: task.createdAt ?? new Date().toISOString(),
-  }).catch(console.error);
+  setDoc(
+    doc(taskCol(), task.id),
+    stripUndefined({ ...task, createdAt: task.createdAt ?? new Date().toISOString() }),
+  ).catch(console.error);
 }
 
 export function fsDeleteTask(id: string): void {
