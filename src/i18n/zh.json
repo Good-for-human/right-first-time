@@ -26,7 +26,17 @@
     "risk": "风险",
     "diffFromBaseline": "与原始抓取数据的差异（当前目标语种正文）",
     "sourceConfirm": "确认同步到任务",
-    "sourceDiscard": "放弃修改"
+    "sourceDiscard": "放弃修改",
+    "imageBulkDownload": "一键下载",
+    "imageDownloadTitle": "批量下载产品图片",
+    "imageDownloadAsinLabel": "ASIN",
+    "imageDownloadAsinPlaceholder": "如 B0XXXXXXXX",
+    "imageDownloadStart": "开始下载",
+    "imageDownloadCancel": "取消",
+    "imageDownloadProgress": "正在下载 {{current}} / {{total}}",
+    "imageDownloadInvalidAsin": "请输入有效 ASIN（字母与数字，至少 8 位）。",
+    "imageDownloadFailed": "下载失败",
+    "imageDownloadProxyHint": "需在已部署的 Netlify 环境或本地运行 netlify dev 以启用图片代理。"
   },
   "score": {
     "clarity": "可读性",

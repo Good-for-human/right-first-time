@@ -26,7 +26,17 @@
     "risk": "Risk",
     "diffFromBaseline": "Diff vs scraped baseline (target language)",
     "sourceConfirm": "Confirm sync to task",
-    "sourceDiscard": "Discard edits"
+    "sourceDiscard": "Discard edits",
+    "imageBulkDownload": "Download all",
+    "imageDownloadTitle": "Download product images",
+    "imageDownloadAsinLabel": "ASIN",
+    "imageDownloadAsinPlaceholder": "e.g. B0XXXXXXXX",
+    "imageDownloadStart": "Start download",
+    "imageDownloadCancel": "Cancel",
+    "imageDownloadProgress": "Downloading {{current}} / {{total}}",
+    "imageDownloadInvalidAsin": "Enter a valid ASIN (alphanumeric, at least 8 characters).",
+    "imageDownloadFailed": "Download failed",
+    "imageDownloadProxyHint": "Image proxy runs on Netlify (or use netlify dev locally)."
   },
   "score": {
     "clarity": "Clarity",

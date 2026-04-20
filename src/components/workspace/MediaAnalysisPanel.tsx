@@ -3,14 +3,17 @@
  * with Gemini Vision image understanding.
  */
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Layers, Image, LayoutTemplate,
   ChevronDown, ChevronUp, ExternalLink,
   Sparkles, Loader2, AlertTriangle,
+  Download, X,
 } from 'lucide-react';
 import type { Task, AppSettings, Rule } from '@/types';
 import { analyzeProductImages, parseLLMError } from '@/services/llm';
 import { normalizeProductImageUrl, remoteProductImgProps } from '@/lib/remoteImage';
+import { downloadProductImageSeries, sanitizeAsinForFilename } from '@/lib/downloadProductImages';
 
 interface MediaAnalysisPanelProps {
   task: Task;
@@ -52,6 +55,8 @@ function SectionHeader({
 }
 
 export function MediaAnalysisPanel({ task, appSettings, rules }: MediaAnalysisPanelProps) {
+  const { t } = useTranslation();
+
   const [specsOpen,  setSpecsOpen]  = useState(true);
   const [imagesOpen, setImagesOpen] = useState(true);
   const [aplusOpen,  setAplusOpen]  = useState(true);
@@ -59,6 +64,12 @@ export function MediaAnalysisPanel({ task, appSettings, rules }: MediaAnalysisPa
   const [imgAnalysis,     setImgAnalysis]     = useState<string | null>(null);
   const [imgAnalysisLoading, setImgAnalysisLoading] = useState(false);
   const [imgAnalysisError,   setImgAnalysisError]   = useState<string | null>(null);
+
+  const [asinDownloadOpen, setAsinDownloadOpen] = useState(false);
+  const [asinInput, setAsinInput] = useState('');
+  const [downloadBusy, setDownloadBusy] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState<{ current: number; total: number } | null>(null);
 
   const specs  = task.specs  ?? {};
   const images = (task.images ?? [])
@@ -101,7 +112,43 @@ export function MediaAnalysisPanel({ task, appSettings, rules }: MediaAnalysisPa
     }
   };
 
+  const openAsinDownload = () => {
+    const pre = sanitizeAsinForFilename(task.asin) || task.asin.trim().toUpperCase();
+    setAsinInput(pre);
+    setDownloadError(null);
+    setDownloadProgress(null);
+    setAsinDownloadOpen(true);
+  };
+
+  const closeAsinDownload = () => {
+    if (downloadBusy) return;
+    setAsinDownloadOpen(false);
+    setDownloadError(null);
+  };
+
+  const runBulkDownload = async () => {
+    const cleaned = sanitizeAsinForFilename(asinInput);
+    if (cleaned.length < 8) {
+      setDownloadError(t('ws.imageDownloadInvalidAsin'));
+      return;
+    }
+    setDownloadBusy(true);
+    setDownloadError(null);
+    setDownloadProgress({ current: 0, total: images.length });
+    try {
+      await downloadProductImageSeries(images, cleaned, (p) => setDownloadProgress(p));
+      setAsinDownloadOpen(false);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      setDownloadError(`${t('ws.imageDownloadFailed')}: ${detail} ${t('ws.imageDownloadProxyHint')}`);
+    } finally {
+      setDownloadBusy(false);
+      setDownloadProgress(null);
+    }
+  };
+
   return (
+    <>
     <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
       <div className="px-4 py-3 bg-[#0052D9]/5 border-b border-slate-200">
         <h3 className="text-[13px] font-semibold text-[#0052D9]">媒体与参数分析</h3>
@@ -148,16 +195,28 @@ export function MediaAnalysisPanel({ task, appSettings, rules }: MediaAnalysisPa
             open={imagesOpen}
             onToggle={() => setImagesOpen((v) => !v)}
             actions={
-              <button
-                onClick={handleAnalyzeImages}
-                disabled={imgAnalysisLoading}
-                className="flex items-center gap-1.5 px-2.5 py-1 bg-violet-50 text-violet-700 hover:bg-violet-100 border border-violet-200 rounded text-[11px] font-medium transition disabled:opacity-50"
-              >
-                {imgAnalysisLoading
-                  ? <><Loader2 size={11} className="animate-spin" /> 分析中...</>
-                  : <><Sparkles size={11} /> AI 图片理解</>
-                }
-              </button>
+              <div className="flex flex-wrap items-center justify-end gap-1.5">
+                <button
+                  type="button"
+                  onClick={openAsinDownload}
+                  disabled={downloadBusy || imgAnalysisLoading}
+                  className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200 rounded text-[11px] font-medium transition disabled:opacity-50"
+                >
+                  <Download size={11} />
+                  {t('ws.imageBulkDownload')}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAnalyzeImages}
+                  disabled={imgAnalysisLoading || downloadBusy}
+                  className="flex items-center gap-1.5 px-2.5 py-1 bg-violet-50 text-violet-700 hover:bg-violet-100 border border-violet-200 rounded text-[11px] font-medium transition disabled:opacity-50"
+                >
+                  {imgAnalysisLoading
+                    ? <><Loader2 size={11} className="animate-spin" /> 分析中...</>
+                    : <><Sparkles size={11} /> AI 图片理解</>
+                  }
+                </button>
+              </div>
             }
           />
           {imagesOpen && (
@@ -267,5 +326,74 @@ export function MediaAnalysisPanel({ task, appSettings, rules }: MediaAnalysisPa
         </div>
       )}
     </div>
+
+    {asinDownloadOpen && (
+      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="bg-white rounded-xl shadow-xl w-full max-w-sm border border-slate-200 overflow-hidden"
+        >
+          <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
+            <h4 className="text-sm font-semibold text-slate-800">{t('ws.imageDownloadTitle')}</h4>
+            <button
+              type="button"
+              onClick={closeAsinDownload}
+              disabled={downloadBusy}
+              className="p-1 text-slate-400 hover:text-slate-600 rounded disabled:opacity-40"
+              aria-label={t('ws.imageDownloadCancel')}
+            >
+              <X size={18} />
+            </button>
+          </div>
+          <div className="p-4 space-y-3">
+            <div>
+              <label className="block text-[11px] font-medium text-slate-600 mb-1">{t('ws.imageDownloadAsinLabel')}</label>
+              <input
+                type="text"
+                value={asinInput}
+                onChange={(e) => setAsinInput(e.target.value.toUpperCase())}
+                placeholder={t('ws.imageDownloadAsinPlaceholder')}
+                disabled={downloadBusy}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono tracking-wide focus:border-[#0052D9] focus:ring-1 focus:ring-[#0052D9] outline-none disabled:bg-slate-50"
+                autoComplete="off"
+              />
+            </div>
+            {downloadError && (
+              <p className="text-[12px] text-red-600 bg-red-50 border border-red-100 rounded-lg px-2 py-1.5">{downloadError}</p>
+            )}
+            {downloadBusy && downloadProgress && (
+              <p className="text-[12px] text-slate-500 flex items-center gap-2">
+                <Loader2 size={14} className="animate-spin shrink-0" />
+                {t('ws.imageDownloadProgress', {
+                  current: downloadProgress.current,
+                  total: downloadProgress.total,
+                })}
+              </p>
+            )}
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={closeAsinDownload}
+                disabled={downloadBusy}
+                className="px-3 py-2 text-xs font-medium text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-40"
+              >
+                {t('ws.imageDownloadCancel')}
+              </button>
+              <button
+                type="button"
+                onClick={() => void runBulkDownload()}
+                disabled={downloadBusy}
+                className="px-3 py-2 text-xs font-medium text-white bg-[#0052D9] rounded-lg hover:bg-blue-800 disabled:opacity-40 flex items-center gap-1.5"
+              >
+                {downloadBusy ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
+                {t('ws.imageDownloadStart')}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
