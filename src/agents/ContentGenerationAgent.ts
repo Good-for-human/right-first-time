@@ -114,7 +114,12 @@ export class ContentGenerationAgent {
         })
       );
 
-      generatedContent = Object.fromEntries(results) as GeneratedContent;
+      const partial = Object.fromEntries(results) as Partial<Record<ContentKey, string>>;
+      generatedContent = {
+        title:       partial.title       ?? rawMap.title,
+        bullets:     partial.bullets     ?? rawMap.bullets,
+        description: partial.description ?? rawMap.description,
+      };
     }
 
     return {

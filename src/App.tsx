@@ -1,6 +1,4 @@
 import { useState } from 'react';
-import { signOut } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { Workspace } from '@/components/workspace/Workspace';
 import { SettingsAndRules } from '@/components/settings/SettingsAndRules';
