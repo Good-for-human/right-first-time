@@ -1,0 +1,1544 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import { 
+  Search, CheckCircle, AlertTriangle, ChevronRight, 
+  Play, Check, ShieldAlert, Zap, Edit3, Info, FileText, 
+  Settings, Plus, LayoutDashboard, Trash2, X, Archive, Save, Loader2, Clock, List, Users, Globe, User, Languages, RefreshCw, SlidersHorizontal, Sparkles, Cloud, Link
+} from 'lucide-react';
+
+// ==========================================
+// 多语言词典 (i18n Dictionary)
+// ==========================================
+const DICT = {
+  zh: {
+    'app.title': 'Right First Time',
+    'sidebar.newTask': '新建任务',
+    'sidebar.search': '搜索 ASIN 或品名...',
+    'sidebar.review': '待审核',
+    'sidebar.archived': '已审核',
+    'sidebar.noResults': '无结果',
+    'sidebar.settings': '系统设置',
+    'status.review': '待审核',
+    'status.archived': '已审核',
+    'ws.source': '原始数据',
+    'ws.aiWorkspace': 'AI 工作区',
+    'ws.translation': '翻译',
+    'ws.genSettings': '生成设置',
+    'ws.globalRegen': '全局重写',
+    'ws.report': '评估报告',
+    'ws.risk': '风险',
+    'score.clarity': '可读性',
+    'score.completeness': '完整度',
+    'score.searchability': '规范度',
+    'score.compliance': '合规',
+    'btn.approve': '入库',
+    'btn.archivedBtn': '已入库',
+    'btn.regenerate': 'AI 重写',
+    'btn.regenerating': '生成中...',
+    'section.title': '商品标题',
+    'section.bullets': '五点描述',
+    'section.desc': '产品描述',
+    'target.lang': '目标',
+    'lang.en': '英文',
+    'lang.zh': '中文',
+    'set.title': '配置与规则',
+    'set.desc': '管理系统配置、大模型参数及 AI 规则（画像、生成规则、风控红线）。',
+    'set.lang': '语言设置',
+    'set.sysLang': '系统语言',
+    'set.targetLang': '默认目标语言',
+    'set.targetLangDesc': '新建任务的默认语言。',
+    'set.model': '大模型配置',
+    'set.defaultModel': '默认模型',
+    'set.apiKey': 'API 密钥 (本地存储)',
+    'set.modifyKey': '修改密钥',
+    'set.fetchConfig': '数据抓取接口 (Tinyfish API)',
+    'set.tinyfishKey': 'Tinyfish API 密钥',
+    'set.tinyfishDesc': '调用 Tinyfish API 实时抓取亚马逊和 TP-Link 官网的最新数据结构。',
+    'set.persona': '用户画像库',
+    'set.personaDesc': '管理目标受众标签。AI 优化时将基于选定的画像调整文案的专业度与语气。',
+    'set.add': '新增',
+    'set.noPersona': '暂无画像',
+    'set.categoryRules': '类目规则库',
+    'set.categoryRulesDesc': '规则按类目隔离。AI 生成时将组合使用：[用户画像]设定语境 → [生成规则]指引输出 → [风控红线]校验违规。',
+    'set.addCategory': '新建类目',
+    'set.genRules': '生成规则',
+    'set.negRules': '风控红线',
+    'set.noGenRules': '暂无生成规则',
+    'set.noNegRules': '暂无风控红线',
+    'modal.createTask': '新建任务',
+    'modal.asin': '输入 ASIN',
+    'modal.url': '参考链接 URL (可选)',
+    'modal.urlPlaceholder': '支持 TP-Link 官网或亚马逊链接...',
+    'modal.category': '所属类目',
+    'modal.cancel': '取消',
+    'modal.create': '创建并生成',
+    'modal.save': '保存',
+    'modal.confirmSave': '确定保存',
+    'modal.edit': '编辑',
+    'modal.add': '添加',
+    'modal.name': '名称',
+    'modal.personaDesc': '画像偏好描述',
+    'modal.prompt': '执行指令',
+    'modal.scope': '生效范围',
+    'modal.scopeAll': '全部',
+    'modal.priority': '优先级',
+    'modal.req': '必须执行',
+    'modal.sug': '建议采纳',
+    'modal.ref': '参考标杆 ASIN',
+    'modal.refDesc': '提供参考样本。',
+    'modal.severity': '风险级别',
+    'modal.crit': 'Critical (阻断)',
+    'modal.high': 'High (高危)',
+    'modal.delete': '确认删除',
+    'modal.deleteConfirm': '确定删除吗？此操作无法撤销。',
+    'global.save': '保存配置',
+    'global.saved': '已保存配置',
+    'ai.optimize': 'AI 优化 (COSMO标准)',
+    'ai.optimizing': '正在优化...'
+  },
+  en: {
+    'app.title': 'Right First Time',
+    'sidebar.newTask': 'New Task',
+    'sidebar.search': 'Search ASIN or Name...',
+    'sidebar.review': 'Pending Review',
+    'sidebar.archived': 'Reviewed',
+    'sidebar.noResults': 'No Results',
+    'sidebar.settings': 'Settings',
+    'status.review': 'Review',
+    'status.archived': 'Reviewed',
+    'ws.source': 'Source Data',
+    'ws.aiWorkspace': 'AI Workspace',
+    'ws.translation': 'Translate',
+    'ws.genSettings': 'Gen Settings',
+    'ws.globalRegen': 'Regen All',
+    'ws.report': 'Evaluation Report',
+    'ws.risk': 'Risk',
+    'score.clarity': 'Clarity',
+    'score.completeness': 'Complete',
+    'score.searchability': 'Structure',
+    'score.compliance': 'Compliance',
+    'btn.approve': 'Approve',
+    'btn.archivedBtn': 'Approved',
+    'btn.regenerate': 'AI Rewrite',
+    'btn.regenerating': 'Generating...',
+    'section.title': 'Title',
+    'section.bullets': 'Bullets',
+    'section.desc': 'Description',
+    'target.lang': 'Target',
+    'lang.en': 'EN',
+    'lang.zh': 'ZH',
+    'set.title': 'Configuration & Rules',
+    'set.desc': 'Manage system settings, model configs, and AI rules (Personas, Instructions, Constraints).',
+    'set.lang': 'Language Settings',
+    'set.sysLang': 'System Language',
+    'set.targetLang': 'Default Target Language',
+    'set.targetLangDesc': 'Default language for new tasks.',
+    'set.model': 'LLM Configuration',
+    'set.defaultModel': 'Default Model',
+    'set.apiKey': 'API Key (Local Storage)',
+    'set.modifyKey': 'Modify Key',
+    'set.fetchConfig': 'Data Fetch API (Tinyfish)',
+    'set.tinyfishKey': 'Tinyfish API Key',
+    'set.tinyfishDesc': 'Use Tinyfish API to dynamically scrape data from Amazon or TP-Link official websites.',
+    'set.persona': 'Persona Library',
+    'set.personaDesc': 'Manage target audience tags. AI optimization will adjust professionalism and tone based on selected persona.',
+    'set.add': 'Add New',
+    'set.noPersona': 'No Personas',
+    'set.categoryRules': 'Category Rules Library',
+    'set.categoryRulesDesc': 'Rules isolated by category. AI uses: [Persona] context → [Gen Rules] guidance → [Risk Rules] validation.',
+    'set.addCategory': 'New Category',
+    'set.genRules': 'Generation Rules',
+    'set.negRules': 'Compliance Constraints',
+    'set.noGenRules': 'No Generation Rules',
+    'set.noNegRules': 'No Constraints',
+    'modal.createTask': 'Create Task',
+    'modal.asin': 'Enter ASIN',
+    'modal.url': 'Reference URL (Optional)',
+    'modal.urlPlaceholder': 'TP-Link official or Amazon link...',
+    'modal.category': 'Category',
+    'modal.cancel': 'Cancel',
+    'modal.create': 'Create & Generate',
+    'modal.save': 'Save',
+    'modal.confirmSave': 'Confirm Save',
+    'modal.edit': 'Edit',
+    'modal.add': 'Add',
+    'modal.name': 'Name',
+    'modal.personaDesc': 'Persona Preferences',
+    'modal.prompt': 'Execution Prompt',
+    'modal.scope': 'Target Scope',
+    'modal.scopeAll': 'All Sections',
+    'modal.priority': 'Priority',
+    'modal.req': 'Required',
+    'modal.sug': 'Suggested',
+    'modal.ref': 'Reference ASINs',
+    'modal.refDesc': 'Provide Few-shot samples.',
+    'modal.severity': 'Severity Level',
+    'modal.crit': 'Critical (Block)',
+    'modal.high': 'High (Warning)',
+    'modal.delete': 'Confirm Deletion',
+    'modal.deleteConfirm': 'Are you sure to delete? This cannot be undone.',
+    'global.save': 'Save Settings',
+    'global.saved': 'Settings Saved',
+    'ai.optimize': 'AI Optimize (COSMO/Best Practice)',
+    'ai.optimizing': 'Optimizing...'
+  }
+};
+
+const LANGUAGES = [
+  { code: 'en', label: 'English', zhLabel: '英语' },
+  { code: 'de', label: 'Deutsch', zhLabel: '德语' },
+  { code: 'fr', label: 'Français', zhLabel: '法语' },
+  { code: 'it', label: 'Italiano', zhLabel: '意大利语' },
+  { code: 'es', label: 'Español', zhLabel: '西班牙语' },
+  { code: 'zh', label: '中文', zhLabel: '中文' },
+];
+
+const INITIAL_PERSONAS = [
+  { id: 'p1', name: '智能家居新手', description: '偏好简单易懂的设置说明，强调Tapo App控制、语音助手兼容性（Alexa/Google）和家庭安全性。排斥复杂的网络术语。' },
+  { id: 'p2', name: '科技发烧友/极客', description: '极度关注吞吐量(Mbps)、频段(Tri-band/Wi-Fi 7)、端口规格(2.5G/10G)及低延迟表现。要求参数精准、硬核。' },
+  { id: 'p3', name: '大户型家庭用户', description: '关注信号覆盖面积、穿墙能力、Mesh组网扩展性(Deco系列)及无缝漫游体验。' },
+  { id: 'p4', name: '中小企业网管', description: '关注VLAN、VPN支持、PoE供电、集中云化管理(Omada SDN)及企业级安全性。' }
+];
+
+const INITIAL_TASKS = [
+  { id: '1', asin: 'B08TGPTQ14', name: 'TP-Link Archer AX73', category: '网络终端', language: 'en', personaIds: ['p2', 'p3'], status: 'review' },
+  { id: '3', asin: 'B08TH4D3QV', name: 'TP-Link Deco X20', category: '网络终端', language: 'de', personaIds: ['p3'], status: 'review' },
+  { id: '4', asin: 'B08P1X6LXC', name: 'TP-Link Tapo C200', category: '智能家居', language: 'es', personaIds: ['p1'], status: 'review' },
+  { id: '2', asin: 'B08WBGFTTV', name: 'TP-Link TL-SG105PE', category: '商用网络', language: 'en', personaIds: ['p4'], status: 'archived' },
+];
+
+const MOCK_RAW_LISTING = {
+  title: "TP-Link WiFi 6 Router AX5400 Smart WiFi Router (Archer AX73) – Dual Band Gigabit Router, Long Range Coverage, Supports VPN Server/Client, Works with Alexa, OneMesh Compatible",
+  bullets: [
+    "Gigabit WiFi for 8K Streaming – 5400 Mbps WiFi for faster browsing, streamings, and downloading, all at the same time.",
+    "Fully Featured Wi-Fi 6 – Equips with the top structure of 4T4R and HE160 on the 5 GHz band to enable 4.8 Gbps ultra-fast connection.",
+    "Connect 200+ Devices – Supports MU-MIMO and OFDMA to reduce congestion and quadruple the average throughput.",
+    "Extensive Coverage – Enjoy stable Wi-Fi connections, even in the kitchen and bedroom. High-Power FEM, 6× Antennas, Beamforming, and 4T4R structures combine to adapt WiFi coverage."
+  ],
+  description: "Welcome to the next generation of Wi-Fi with the Archer AX73. This amazing router gives you ultra-fast speeds up to 5400Mbps. It's the best router for your home. Buy it today and experience no more buffering. Works perfectly with TP-Link OneMesh extenders.",
+  specs: { Brand: "TP-Link", "Model Name": "Archer AX73", "Wireless Standard": "802.11ax" }
+};
+
+const MOCK_TRANSLATIONS = {
+  title: {
+    zh: "TP-Link Archer AX73 AX5400 双频千兆 WiFi 6 路由器，广覆盖，支持 OneMesh 与 Alexa",
+    en: "TP-Link Archer AX73 AX5400 Dual Band Gigabit WiFi 6 Router, Long Range Coverage, OneMesh & Alexa Compatible",
+    de: "TP-Link Archer AX73 AX5400 Dualband-Gigabit-WLAN-6-Router, große Reichweite, OneMesh- & Alexa-kompatibel",
+    fr: "Routeur TP-Link Archer AX73 AX5400 WiFi 6 Gigabit double bande, longue portée, compatible OneMesh et Alexa",
+    it: "Router TP-Link Archer AX73 AX5400 WiFi 6 Gigabit Dual Band, Ampia Copertura, Compatibile con OneMesh e Alexa",
+    es: "Router TP-Link Archer AX73 AX5400 WiFi 6 Gigabit de doble banda, amplia cobertura, compatible con OneMesh y Alexa"
+  },
+  bullets: {
+    zh: "• 极速 WIFI 6: 双频速度高达 5400 Mbps（5 GHz 上 4804 Mbps + 2.4 GHz 上 574 Mbps），实现无缝 8K 流媒体播放。\n• 连接200+设备: MU-MIMO 和 OFDMA 技术可大幅减少网络拥塞。\n• 广阔覆盖范围: 6 根高性能天线配备波束成形技术，确保整个大户型的稳定连接。",
+    en: "• ULTRA-FAST WIFI 6: Dual-band speeds up to 5400 Mbps (4804 Mbps on 5 GHz + 574 Mbps on 2.4 GHz) for seamless 8K streaming.\n• CONNECT 200+ DEVICES: MU-MIMO and OFDMA technologies minimize network congestion.\n• EXTENSIVE COVERAGE: 6 high-performance antennas equipped with Beamforming ensure stable connections throughout large homes."
+  },
+  description: {
+    zh: "TP-Link Archer AX73 是一款专为高需求家庭网络设计的高性能 AX5400 双频 WiFi 6 路由器。配备 MU-MIMO 和 OFDMA 技术，支持超 200 个并发连接。兼容 TP-Link OneMesh 扩展器。",
+    en: "The TP-Link Archer AX73 is a high-performance AX5400 dual-band WiFi 6 router designed to handle demanding home networks. Equipped with MU-MIMO and OFDMA technologies, it supports over 200 concurrent connections. Compatible with TP-Link OneMesh."
+  }
+};
+
+const MOCK_METADATA = {
+  title: { rulesApplied: ["[规则] 必须以 TP-Link [产品型号] 开头", "[画像] 强化发烧友参数"], negativeCheck: { passed: true }, explanation: "已按照亚马逊规范前置品牌和型号，移除堆砌的搜索词。" },
+  bullets: { rulesApplied: ["[规则] 使用全大写特征词前缀", "[规则] 提取明确技术指标"], negativeCheck: { passed: true }, explanation: "根据COSMO算法偏好，重构为带前缀的语义化分类，凸显 4804Mbps 等具体指标。" },
+  description: { rulesApplied: ["[规则] 提升可读性", "[规则] 保持客观专业语气"], negativeCheck: { passed: false, issues: ["仍包含轻微的夸大词 ('high-performance')"] }, explanation: "已拦截绝对化用语 (如 'best router', 'Buy it today')，重写为专业客观陈述。" }
+};
+
+const MOCK_REVIEW = {
+  scores: { clarity: 94, completeness: 90, searchability: 96, compliance: 82 },
+  issues: [{ type: "Warning", text: "Description still contains slightly subjective term 'high-performance'." }],
+  riskLevel: "Low"
+};
+
+const INITIAL_CATEGORIES = ['网络终端', '智能家居', '商用网络', '拓展配件'];
+
+const INITIAL_RULES = [
+  { id: 1, category: '通用', type: 'instruction', targetSection: 'title', name: '标题必须严格以 TP-Link [产品型号] 开头', priority: 'Required', referenceAsins: ['B08WBGFTTV'], active: true },
+  { id: 2, category: '通用', type: 'instruction', targetSection: 'bullets', name: '五点描述必须使用全大写英文特征词作为前缀，如 SPEED: 或 CAPABILITY:', priority: 'Required', referenceAsins: ['B08TGPTQ14'], active: true },
+  { id: 3, category: '通用', type: 'negative', targetSection: 'all', name: '禁止使用绝对化或虚假宣传词汇，如 The best, No more buffering, Buy now', active: true, severity: 'Critical' },
+  { id: 4, category: '网络终端', type: 'instruction', targetSection: 'bullets', name: '必须明确标出无线协议标准(如 WiFi 6)以及 5GHz/2.4GHz 的精准并发速率', priority: 'Suggested', referenceAsins: ['B08TGPTQ14'], active: true },
+  { id: 5, category: '智能家居', type: 'negative', targetSection: 'description', name: '禁止在未经认证的情况下使用“军工级加密”、“防黑客破解”等安全承诺', active: true, severity: 'High' },
+];
+
+// ==========================================
+// 基础组件
+// ==========================================
+const Badge = ({ children, color = "blue", className = "" }) => {
+  const colors = {
+    blue: "bg-blue-50 text-blue-700 border-blue-200",
+    green: "bg-green-50 text-green-700 border-green-200",
+    red: "bg-red-50 text-red-700 border-red-200",
+    orange: "bg-orange-50 text-orange-700 border-orange-200",
+    gray: "bg-slate-100 text-slate-600 border-slate-200",
+    purple: "bg-purple-50 text-purple-700 border-purple-200",
+  };
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${colors[color]} ${className}`}>{children}</span>
+  );
+};
+
+const ProgressBar = ({ label, value, colorClass = "bg-[#0052D9]" }) => (
+  <div className="flex-1">
+    <div className="flex justify-between text-xs mb-1.5">
+      <span className="font-medium text-slate-600">{label}</span>
+      <span className="text-slate-800 font-semibold">{value}%</span>
+    </div>
+    <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+      <div className={`h-1.5 rounded-full ${colorClass} transition-all duration-1000 ease-out`} style={{ width: `${value}%` }}></div>
+    </div>
+  </div>
+);
+
+const renderStatusIcon = (status) => {
+  switch(status) {
+    case 'review': return <div className="w-2.5 h-2.5 rounded-full bg-orange-400"></div>;
+    case 'archived': return <CheckCircle size={14} className="text-green-500" />;
+    default: return null;
+  }
+};
+
+// ==========================================
+// 拆分子组件
+// ==========================================
+const SidebarGroup = ({ title, queue, icon: Icon, view, activeTaskId, setActiveTaskId, setView }) => {
+  if (!queue || queue.length === 0) return null;
+  
+  return (
+    <div className="mb-5">
+      <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 px-4 flex items-center gap-1.5">
+        {Icon && <Icon size={12} />} {title}
+      </div>
+      <div className="space-y-0.5 px-2">
+        {queue.map(task => (
+          <button
+            key={task.id}
+            onClick={() => { setActiveTaskId(task.id); setView('workspace'); }}
+            className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition flex items-start justify-between group ${
+              view === 'workspace' && activeTaskId === task.id 
+                ? 'bg-blue-50/70 border border-blue-100 shadow-sm' 
+                : 'hover:bg-slate-50 border border-transparent'
+            }`}
+          >
+            <div className="flex items-start gap-2.5 truncate w-full">
+              <div className="mt-1 shrink-0">{renderStatusIcon(task.status)}</div>
+              <div className="truncate flex-1 min-w-0">
+                <div className={`font-medium truncate ${view === 'workspace' && activeTaskId === task.id ? 'text-[#0052D9]' : 'text-slate-700'}`}>
+                  {task.name || task.asin}
+                </div>
+                {task.name && (
+                  <div className={`text-xs truncate mt-0.5 ${view === 'workspace' && activeTaskId === task.id ? 'text-blue-500/80' : 'text-slate-400'}`}>
+                    {task.asin}
+                  </div>
+                )}
+              </div>
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const EditorSection = ({ title, dataKey, mockData, edits, setEdits, isArchived, appSettings, onRegenerate, isRegenerating, t }) => {
+  const targetLangObj = LANGUAGES.find(l => l.code === appSettings.targetLanguage);
+  const targetLangLabel = appSettings.systemLanguage === 'zh' ? targetLangObj?.zhLabel : targetLangObj?.label;
+  const translationLabel = appSettings.translationLang === 'zh' ? (appSettings.systemLanguage === 'zh' ? '中文' : 'Chinese') : (appSettings.systemLanguage === 'zh' ? '英文' : 'English');
+  const translationContent = MOCK_TRANSLATIONS[dataKey]?.[appSettings.translationLang] || MOCK_TRANSLATIONS[dataKey]?.en || 'N/A';
+
+  return (
+    <div className="mb-6 bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden group flex flex-col">
+      <div className="bg-slate-50/80 px-4 py-3 border-b border-slate-200 flex justify-between items-center shrink-0">
+        <div className="flex items-center gap-3">
+          <h3 className="font-semibold text-slate-800 text-[13px]">{title}</h3>
+          {mockData.negativeCheck.passed ? <Badge color="green"><Check size={10} className="mr-1 inline"/>Pass</Badge> : <Badge color="orange"><AlertTriangle size={10} className="mr-1 inline"/>Flagged</Badge>}
+        </div>
+        
+        {!isArchived && (
+          <button 
+            onClick={() => onRegenerate(dataKey)}
+            disabled={isRegenerating}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 text-slate-600 hover:text-[#0052D9] hover:border-blue-200 rounded-md text-xs font-medium transition shadow-sm disabled:opacity-50"
+          >
+            <RefreshCw size={12} className={isRegenerating ? "animate-spin text-[#0052D9]" : ""} />
+            {isRegenerating ? t('btn.regenerating') : t('btn.regenerate')}
+          </button>
+        )}
+      </div>
+      
+      <div className="grid grid-cols-2 divide-x divide-slate-100 flex-1">
+        <div className="p-4 flex flex-col">
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-[11px] font-semibold text-[#0052D9] flex items-center gap-1.5 tracking-wider">
+              <Globe size={12} /> {targetLangLabel}
+            </span>
+          </div>
+          <div className="relative">
+            <textarea
+              className={`w-full text-sm p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-100 focus:border-[#0052D9] outline-none resize-y min-h-[100px] text-slate-800 leading-relaxed shadow-inner bg-slate-50/30 transition-opacity ${isRegenerating ? 'opacity-40' : 'opacity-100'}`}
+              value={edits[dataKey]}
+              onChange={(e) => setEdits({...edits, [dataKey]: e.target.value})}
+              disabled={isArchived || isRegenerating}
+            />
+          </div>
+          <div className="mt-3 bg-blue-50/50 p-2.5 rounded-lg border border-blue-100 flex items-start gap-2">
+            <Info size={14} className="text-[#0052D9] mt-0.5 shrink-0" />
+            <div>
+              <p className="text-[11px] text-slate-600 mb-1.5 leading-relaxed">{mockData.explanation}</p>
+              <div className="flex flex-wrap gap-1">
+                {mockData.rulesApplied.map((rule, idx) => {
+                  const isPersona = rule.includes('[画像]') || rule.includes('[Persona]');
+                  return (
+                    <span key={idx} className={`border text-[9px] px-1.5 py-0.5 rounded shadow-sm ${isPersona ? 'bg-purple-50 border-purple-100 text-purple-700' : 'bg-white border-blue-100 text-slate-500'}`}>
+                      {rule}
+                    </span>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="p-4 flex flex-col bg-slate-50/30">
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-[11px] font-semibold text-slate-500 flex items-center gap-1.5 tracking-wider">
+              <Languages size={12} /> {translationLabel}
+            </span>
+          </div>
+          <div className="w-full text-sm p-3 border border-slate-100 rounded-lg bg-white text-slate-600 min-h-[100px] leading-relaxed shadow-sm break-words whitespace-pre-wrap">
+            {translationContent}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ==========================================
+// 工作区组件
+// ==========================================
+const Workspace = ({ task, updateTask, categories, personas, appSettings, setAppSettings, t }) => {
+  const [globalLoading, setGlobalLoading] = useState(false);
+  const [sectionLoading, setSectionLoading] = useState({ title: false, bullets: false, description: false });
+  const [edits, setEdits] = useState({ title: '', bullets: '', description: '' });
+
+  const loadMockDataForLanguage = (lang) => {
+    return {
+      title: MOCK_TRANSLATIONS.title[lang] || MOCK_TRANSLATIONS.title.en,
+      bullets: MOCK_TRANSLATIONS.bullets[lang] || MOCK_TRANSLATIONS.bullets.en,
+      description: MOCK_TRANSLATIONS.description[lang] || MOCK_TRANSLATIONS.description.en,
+    };
+  };
+
+  useEffect(() => {
+    if (task && (task.status === 'review' || task.status === 'archived')) {
+      setEdits(loadMockDataForLanguage(task.language));
+    } else {
+      setEdits({ title: '', bullets: '', description: '' });
+    }
+  }, [task?.id, task?.language]);
+
+  if (!task) return <div className="flex-1 flex items-center justify-center text-slate-400 bg-slate-50">Select or create a task</div>;
+
+  const handleTaskFlowAction = (nextStatus, delay = 1200) => {
+    setGlobalLoading(true);
+    setTimeout(() => {
+      updateTask(task.id, { status: nextStatus });
+      setGlobalLoading(false);
+    }, delay);
+  };
+
+  const handleGlobalRegenerate = () => {
+    setGlobalLoading(true);
+    setTimeout(() => {
+      setEdits(loadMockDataForLanguage(task.language));
+      setGlobalLoading(false);
+    }, 2000);
+  };
+
+  const handleSectionRegenerate = (sectionKey) => {
+    setSectionLoading(prev => ({...prev, [sectionKey]: true}));
+    setTimeout(() => {
+      setEdits(prev => ({
+        ...prev,
+        [sectionKey]: MOCK_TRANSLATIONS[sectionKey][task.language] || MOCK_TRANSLATIONS[sectionKey].en
+      }));
+      setSectionLoading(prev => ({...prev, [sectionKey]: false}));
+    }, 1500);
+  };
+
+  const isArchived = task.status === 'archived';
+
+  return (
+    <div className="flex-1 flex flex-col h-full bg-[#F7F9FC] relative">
+      <div className="bg-white border-b border-slate-200 px-6 py-3.5 flex items-center justify-between shrink-0 shadow-sm z-10">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <h2 className="text-lg font-bold text-slate-800 tracking-tight mr-2">{task.asin}</h2>
+            {isArchived && <Badge color="green" className="ml-1"><Archive size={12} className="mr-1 inline"/> {t('status.archived')}</Badge>}
+          </div>
+          <p className="text-xs text-slate-500">{task.name || task.url}</p>
+        </div>
+        
+        <div className="flex items-center gap-5">
+          <div className="flex items-center gap-2 text-sm font-medium mr-2">
+            <span className={task.status === 'review' ? 'text-[#0052D9]' : 'text-slate-800'}>{t('status.review')}</span>
+            <ChevronRight size={14} className="text-slate-300"/>
+            <span className={task.status === 'archived' ? 'text-[#0052D9]' : 'text-slate-400'}>{t('status.archived')}</span>
+          </div>
+
+          <div className="h-6 w-px bg-slate-200 mx-1"></div>
+
+          {task.status === 'review' && (
+            <div className="flex items-center gap-3">
+              <button onClick={() => handleTaskFlowAction('archived', 600)} className="bg-green-600 text-white px-5 py-2 rounded-md text-sm font-medium hover:bg-green-700 transition flex items-center gap-2 shadow-sm">
+                {globalLoading ? <Loader2 size={16} className="animate-spin" /> : <><Check size={16} /> {t('btn.approve')}</>}
+              </button>
+            </div>
+          )}
+          {isArchived && (
+            <button className="bg-slate-100 text-slate-500 cursor-not-allowed px-5 py-2 rounded-md text-sm font-medium flex items-center gap-2">
+              <CheckCircle size={16} /> {t('btn.archivedBtn')}
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="flex-1 flex overflow-hidden">
+        <div className="w-[30%] bg-white border-r border-slate-200 flex flex-col h-full z-0 shadow-sm relative">
+          <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-50 flex items-center gap-2 shrink-0">
+            <FileText size={16} className="text-slate-500" />
+            <h2 className="font-semibold text-slate-700 text-sm">{t('ws.source')}</h2>
+          </div>
+          <div className="flex-1 overflow-y-auto p-6">
+            <div className="space-y-6 animate-in fade-in duration-500">
+              <div>
+                <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">{t('section.title')}</h4>
+                <p className="text-[13px] text-slate-700 leading-relaxed bg-slate-50 p-3 rounded border border-slate-100">{MOCK_RAW_LISTING.title}</p>
+              </div>
+              <div>
+                <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">{t('section.bullets')}</h4>
+                <div className="bg-slate-50 p-3 rounded border border-slate-100">
+                  <ul className="list-disc pl-4 text-[13px] text-slate-700 space-y-2 marker:text-slate-300">
+                    {MOCK_RAW_LISTING.bullets.map((b, i) => <li key={i} className="leading-relaxed">{b}</li>)}
+                  </ul>
+                </div>
+              </div>
+              <div>
+                <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">{t('section.desc')}</h4>
+                <p className="text-[13px] text-slate-700 leading-relaxed bg-slate-50 p-3 rounded border border-slate-100">{MOCK_RAW_LISTING.description}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex-1 bg-[#F7F9FC] flex flex-col h-full relative">
+          <div className="px-5 py-3.5 border-b border-slate-200 bg-white flex items-center justify-between shrink-0 shadow-[0_4px_6px_-1px_rgb(0,0,0,0.02)]">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <SlidersHorizontal size={16} className="text-[#0052D9]" />
+                <h2 className="font-semibold text-slate-800 text-sm">{t('ws.genSettings')}</h2>
+              </div>
+              
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <select 
+                  value={task.category}
+                  onChange={(e) => updateTask(task.id, { category: e.target.value })}
+                  disabled={isArchived}
+                  className="border border-slate-200 rounded px-2 py-1.5 bg-slate-50 text-slate-700 outline-none focus:border-blue-400 disabled:opacity-60 cursor-pointer"
+                >
+                  {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {task.personaIds?.map(pid => {
+                    const p = personas.find(x => x.id === pid);
+                    if (!p) return null;
+                    return (
+                      <span key={pid} className="inline-flex items-center gap-1 px-2 py-1 rounded bg-purple-50 text-purple-700 border border-purple-200">
+                        <User size={10} /> {p.name}
+                        {!isArchived && (
+                          <X size={12} className="cursor-pointer hover:text-purple-900" onClick={() => {
+                            updateTask(task.id, { personaIds: task.personaIds.filter(id => id !== pid) });
+                          }}/>
+                        )}
+                      </span>
+                    );
+                  })}
+                  
+                  {(!task.personaIds || task.personaIds.length < 5) && !isArchived && (
+                    <select 
+                      value=""
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          const newIds = [...(task.personaIds || []), e.target.value];
+                          updateTask(task.id, { personaIds: newIds });
+                        }
+                      }}
+                      className="border border-dashed border-slate-300 rounded px-2 py-1 bg-white text-slate-500 outline-none focus:border-purple-400 cursor-pointer hover:bg-slate-50"
+                    >
+                      <option value="" disabled>+ {t('modal.add')}</option>
+                      {personas.filter(p => !(task.personaIds || []).includes(p.id)).map(p => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              {!isArchived && (
+                <button 
+                  onClick={handleGlobalRegenerate}
+                  disabled={globalLoading}
+                  className="px-3 py-1.5 bg-blue-50 text-[#0052D9] hover:bg-blue-100 border border-blue-200 rounded font-medium transition flex items-center gap-1.5 disabled:opacity-50 shrink-0"
+                >
+                  <RefreshCw size={12} className={globalLoading ? 'animate-spin' : ''} /> {t('ws.globalRegen')}
+                </button>
+              )}
+
+              <div className="h-4 w-px bg-slate-200 mx-1"></div>
+
+              <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-md border border-slate-200 shadow-inner">
+                <span className="text-[11px] font-medium text-slate-500 px-2 flex items-center gap-1"><Languages size={12}/> {t('ws.translation')}:</span>
+                <button 
+                  onClick={() => setAppSettings({...appSettings, translationLang: 'en'})} 
+                  className={`px-3 py-1 text-xs font-medium rounded transition-all ${appSettings.translationLang === 'en' ? 'bg-white shadow-sm text-[#0052D9]' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                  {t('lang.en')}
+                </button>
+                <button 
+                  onClick={() => setAppSettings({...appSettings, translationLang: 'zh'})} 
+                  className={`px-3 py-1 text-xs font-medium rounded transition-all ${appSettings.translationLang === 'zh' ? 'bg-white shadow-sm text-[#0052D9]' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                  {t('lang.zh')}
+                </button>
+              </div>
+            </div>
+          </div>
+          
+          <div className="flex-1 overflow-y-auto p-6">
+            <div className="max-w-[1000px] mx-auto space-y-6 animate-in slide-in-from-bottom-4 fade-in duration-500 pb-10">
+              {globalLoading && (
+                <div className="absolute inset-0 bg-white/50 backdrop-blur-sm z-20 flex items-center justify-center">
+                  <div className="bg-white p-4 rounded-xl shadow-lg border border-slate-100 flex items-center gap-3">
+                    <Loader2 size={20} className="animate-spin text-[#0052D9]" />
+                    <span className="text-sm font-medium text-slate-700">{t('btn.regenerating')}</span>
+                  </div>
+                </div>
+              )}
+
+              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-5">
+                <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+                  <div className="flex items-center gap-2">
+                    <div className="bg-blue-50 p-1 rounded text-[#0052D9]"><ShieldAlert size={14} /></div>
+                    <h3 className="font-bold text-slate-800 text-sm">{t('ws.report')}</h3>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-slate-500">{t('ws.risk')}:</span>
+                    <Badge color="green" className="text-xs px-2 font-bold">{MOCK_REVIEW.riskLevel}</Badge>
+                  </div>
+                </div>
+                <div className="flex gap-6 w-full">
+                  <ProgressBar label={t('score.clarity')} value={MOCK_REVIEW.scores.clarity} />
+                  <ProgressBar label={t('score.completeness')} value={MOCK_REVIEW.scores.completeness} />
+                  <ProgressBar label={t('score.searchability')} value={MOCK_REVIEW.scores.searchability} />
+                  <ProgressBar label={t('score.compliance')} value={MOCK_REVIEW.scores.compliance} colorClass="bg-orange-500" />
+                </div>
+                {MOCK_REVIEW.issues.length > 0 && (
+                  <div className="bg-orange-50 rounded border border-orange-100 p-3 space-y-1 mt-1">
+                    {MOCK_REVIEW.issues.map((issue, idx) => (
+                      <div key={idx} className="flex items-start gap-1.5 text-xs text-orange-800 font-medium">
+                        <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+                        <span>{issue.type}: {issue.text}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <EditorSection title={t('section.title')} dataKey="title" mockData={MOCK_METADATA.title} edits={edits} setEdits={setEdits} isArchived={isArchived} appSettings={{...appSettings, targetLanguage: task.language}} onRegenerate={handleSectionRegenerate} isRegenerating={sectionLoading.title} t={t} />
+              <EditorSection title={t('section.bullets')} dataKey="bullets" mockData={MOCK_METADATA.bullets} edits={edits} setEdits={setEdits} isArchived={isArchived} appSettings={{...appSettings, targetLanguage: task.language}} onRegenerate={handleSectionRegenerate} isRegenerating={sectionLoading.bullets} t={t} />
+              <EditorSection title={t('section.desc')} dataKey="description" mockData={MOCK_METADATA.description} edits={edits} setEdits={setEdits} isArchived={isArchived} appSettings={{...appSettings, targetLanguage: task.language}} onRegenerate={handleSectionRegenerate} isRegenerating={sectionLoading.description} t={t} />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ==========================================
+// 设置与规则中心
+// ==========================================
+const SettingsAndRules = ({ categories, setCategories, rules, setRules, personas, setPersonas, appSettings, setAppSettings, tasks, t }) => {
+  const [activeCategory, setActiveCategory] = useState('通用');
+  const [isAddingCategory, setIsAddingCategory] = useState(false);
+  const [newCategory, setNewCategory] = useState('');
+  
+  const [isSavingGlobal, setIsSavingGlobal] = useState(false);
+  const [globalSaved, setGlobalSaved] = useState(false);
+
+  const [ruleModal, setRuleModal] = useState({ open: false, type: 'instruction', data: null });
+  const [formRule, setFormRule] = useState({ name: '', severity: 'High', priority: 'Required', targetSection: 'all', referenceAsins: [] });
+  const [isOptimizingRule, setIsOptimizingRule] = useState(false);
+  
+  const [personaModal, setPersonaModal] = useState({ open: false, data: null });
+  const [formPersona, setFormPersona] = useState({ name: '', description: '' });
+  const [isOptimizingPersona, setIsOptimizingPersona] = useState(false);
+
+  const [deleteConfirm, setDeleteConfirm] = useState({ open: false, type: '', payload: null, name: '' });
+
+  const filteredRules = rules.filter(r => r.category === activeCategory);
+  const archivedTasks = tasks.filter(tObj => tObj.status === 'archived');
+
+  const getSectionLabel = (section) => {
+    switch(section) {
+      case 'title': return t('section.title');
+      case 'bullets': return t('section.bullets');
+      case 'description': return t('section.desc');
+      default: return t('modal.scopeAll');
+    }
+  };
+
+  const handleAddCategory = () => {
+    if (newCategory.trim() && !categories.includes(newCategory.trim())) {
+      setCategories([...categories, newCategory.trim()]);
+      setActiveCategory(newCategory.trim());
+      setNewCategory('');
+      setIsAddingCategory(false);
+    }
+  };
+
+  const executeDelete = () => {
+    if (deleteConfirm.type === 'category') {
+      const catToDelete = deleteConfirm.payload;
+      setCategories(categories.filter(c => c !== catToDelete));
+      setRules(rules.filter(r => r.category !== catToDelete));
+      if (activeCategory === catToDelete) setActiveCategory('通用');
+    } else if (deleteConfirm.type === 'persona') {
+      setPersonas(personas.filter(p => p.id !== deleteConfirm.payload));
+    } else if (deleteConfirm.type === 'rule') {
+      setRules(rules.filter(r => r.id !== deleteConfirm.payload));
+    }
+    setDeleteConfirm({ open: false, type: '', payload: null, name: '' });
+  };
+
+  const handleGlobalSave = () => {
+    setIsSavingGlobal(true);
+    setTimeout(() => {
+      setIsSavingGlobal(false);
+      setGlobalSaved(true);
+      setAppSettings({ 
+        ...appSettings, 
+        isSaved: !!appSettings.apiKey,
+        isTinyfishSaved: !!appSettings.tinyfishApiKey 
+      });
+      setTimeout(() => setGlobalSaved(false), 2000);
+    }, 600);
+  };
+
+  const openRuleModal = (type, existingRule = null) => {
+    setFormRule(existingRule ? { ...existingRule, referenceAsins: existingRule.referenceAsins || [] } : { name: '', severity: 'High', priority: 'Required', targetSection: 'all', referenceAsins: [] });
+    setRuleModal({ open: true, type, data: existingRule });
+  };
+
+  const saveRule = () => {
+    if (!formRule.name.trim()) return;
+    if (ruleModal.data) {
+      setRules(rules.map(r => r.id === ruleModal.data.id ? { ...r, ...formRule } : r));
+    } else {
+      setRules([...rules, { 
+        id: Date.now(), category: activeCategory, type: ruleModal.type, 
+        name: formRule.name, severity: formRule.severity, priority: formRule.priority, targetSection: formRule.targetSection, referenceAsins: formRule.referenceAsins, active: true 
+      }]);
+    }
+    setRuleModal({ open: false, type: 'instruction', data: null });
+  };
+
+  const addReferenceAsin = (asin) => {
+    if (asin && formRule.referenceAsins.length < 3 && !formRule.referenceAsins.includes(asin)) {
+      setFormRule({...formRule, referenceAsins: [...formRule.referenceAsins, asin]});
+    }
+  };
+
+  const removeReferenceAsin = (asinToRemove) => {
+    setFormRule({...formRule, referenceAsins: formRule.referenceAsins.filter(a => a !== asinToRemove)});
+  };
+
+  const openPersonaModal = (existingPersona = null) => {
+    setFormPersona(existingPersona ? { ...existingPersona } : { name: '', description: '' });
+    setPersonaModal({ open: true, data: existingPersona });
+  };
+
+  const savePersona = () => {
+    if (!formPersona.name.trim() || !formPersona.description.trim()) return;
+    if (personaModal.data) {
+      setPersonas(personas.map(p => p.id === personaModal.data.id ? { ...p, ...formPersona } : p));
+    } else {
+      setPersonas([...personas, { id: `p${Date.now()}`, name: formPersona.name, description: formPersona.description }]);
+    }
+    setPersonaModal({ open: false, data: null });
+  };
+
+  const handleOptimizePersona = () => {
+    setIsOptimizingPersona(true);
+    setTimeout(() => {
+      setFormPersona(prev => ({
+        ...prev,
+        description: prev.description 
+          ? `${prev.description} (已进行 COSMO 意图增强：强调具体的搜索偏好、场景特征，避免宽泛的人口统计学标签。)` 
+          : '基于 COSMO 标准：重点突出用户在实际场景中的使用需求，语言风格偏向专业、直接，拒绝冗余修饰词。'
+      }));
+      setIsOptimizingPersona(false);
+    }, 1500);
+  };
+
+  const handleOptimizeRule = () => {
+    setIsOptimizingRule(true);
+    setTimeout(() => {
+      setFormRule(prev => ({
+        ...prev,
+        name: prev.name 
+          ? `${prev.name} (已应用亚马逊最佳实践：要求具体的数据指标，避免主观形容词，确保格式严谨一致。)` 
+          : '基于最佳实践：提取必须明确具体数值的物理参数，以【参数名: 数值+单位】的统一格式输出，拒绝宽泛描述。'
+      }));
+      setIsOptimizingRule(false);
+    }, 1500);
+  };
+
+  return (
+    <div className="flex-1 flex flex-col h-full bg-[#F7F9FC]">
+      <div className="flex-1 p-8 overflow-y-auto">
+        <div className="max-w-4xl mx-auto space-y-8 pb-10">
+          <div>
+            <h2 className="text-2xl font-bold text-slate-800">{t('set.title')}</h2>
+            <p className="text-slate-500 text-sm mt-1">{t('set.desc')}</p>
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
+            <div className="flex justify-between items-center mb-5">
+              <h3 className="text-[15px] font-semibold text-slate-800 flex items-center gap-2">
+                <Globe size={18} className="text-[#0052D9]"/> {t('set.lang')}
+              </h3>
+            </div>
+            <div className="grid grid-cols-2 gap-6">
+              <div>
+                <label className="block text-[13px] font-medium text-slate-700 mb-1.5">{t('set.sysLang')}</label>
+                <select 
+                  value={appSettings.systemLanguage}
+                  onChange={(e) => setAppSettings({...appSettings, systemLanguage: e.target.value})}
+                  className="w-full border border-slate-300 rounded-md px-3 py-2 text-sm focus:border-[#0052D9] focus:ring-1 focus:ring-[#0052D9] outline-none bg-white"
+                >
+                  <option value="zh">简体中文 (Chinese)</option>
+                  <option value="en">English (英文)</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-[13px] font-medium text-slate-700 mb-1.5">{t('set.targetLang')}</label>
+                <select 
+                  value={appSettings.targetLanguage}
+                  onChange={(e) => setAppSettings({...appSettings, targetLanguage: e.target.value})}
+                  className="w-full border border-slate-300 rounded-md px-3 py-2 text-sm focus:border-[#0052D9] focus:ring-1 focus:ring-[#0052D9] outline-none bg-white"
+                >
+                  {LANGUAGES.map(lang => (
+                    <option key={lang.code} value={lang.code}>{appSettings.systemLanguage === 'zh' ? lang.zhLabel : lang.label}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-slate-400 mt-1.5">{t('set.targetLangDesc')}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-6 bg-white border border-slate-200 rounded-xl shadow-sm">
+            <div className="flex justify-between items-center mb-5">
+              <h3 className="text-[15px] font-semibold text-slate-800 flex items-center gap-2">
+                <Settings size={18} className="text-[#0052D9]"/> {t('set.model')}
+              </h3>
+            </div>
+            <div className="grid grid-cols-2 gap-6">
+              <div>
+                <label className="block text-[13px] font-medium text-slate-700 mb-1.5">{t('set.defaultModel')}</label>
+                <select 
+                  value={appSettings.model}
+                  onChange={(e) => setAppSettings({...appSettings, model: e.target.value})}
+                  className="w-full border border-slate-300 rounded-md px-3 py-2 text-sm focus:border-[#0052D9] focus:ring-1 focus:ring-[#0052D9] outline-none bg-white"
+                >
+                  <option value="gpt-4o">GPT-4o</option>
+                  <option value="claude-3-5-sonnet">Claude 3.5 Sonnet</option>
+                  <option value="gemini-1-5-pro">Gemini 1.5 Pro</option>
+                </select>
+              </div>
+              <div>
+                <div className="flex justify-between items-end mb-1.5">
+                  <label className="block text-[13px] font-medium text-slate-700">{t('set.apiKey')}</label>
+                  {appSettings.isSaved && (
+                    <button 
+                      onClick={() => setAppSettings({...appSettings, isSaved: false, apiKey: ''})}
+                      className="text-xs text-[#0052D9] hover:underline"
+                    >
+                      {t('set.modifyKey')}
+                    </button>
+                  )}
+                </div>
+                <input 
+                  type={appSettings.isSaved ? "text" : "password"}
+                  placeholder="..." 
+                  value={appSettings.isSaved ? "••••••••••••••••••••••••" : appSettings.apiKey}
+                  onChange={(e) => setAppSettings({...appSettings, apiKey: e.target.value})}
+                  disabled={appSettings.isSaved}
+                  className="w-full border border-slate-300 rounded-md px-3 py-2 text-sm focus:border-[#0052D9] focus:ring-1 focus:ring-[#0052D9] outline-none disabled:bg-slate-50 disabled:text-slate-400"
+                />
+              </div>
+            </div>
+          </div>
+          
+          <div className="p-6 bg-white border border-slate-200 rounded-xl shadow-sm mt-6">
+            <div className="flex justify-between items-center mb-5">
+              <h3 className="text-[15px] font-semibold text-slate-800 flex items-center gap-2">
+                <Cloud size={18} className="text-[#0052D9]"/> {t('set.fetchConfig')}
+              </h3>
+            </div>
+            <div className="grid grid-cols-2 gap-6">
+              <div>
+                <p className="text-[13px] text-slate-500 leading-relaxed mt-2">{t('set.tinyfishDesc')}</p>
+                <a href="https://docs.tinyfish.ai/" target="_blank" rel="noreferrer" className="text-xs text-[#0052D9] hover:underline mt-1 inline-block flex items-center gap-1"><Link size={10} /> docs.tinyfish.ai ↗</a>
+              </div>
+              <div>
+                <div className="flex justify-between items-end mb-1.5">
+                  <label className="block text-[13px] font-medium text-slate-700">{t('set.tinyfishKey')}</label>
+                  {appSettings.isTinyfishSaved && (
+                    <button
+                      onClick={() => setAppSettings({...appSettings, isTinyfishSaved: false, tinyfishApiKey: ''})}
+                      className="text-xs text-[#0052D9] hover:underline"
+                    >
+                      {t('set.modifyKey')}
+                    </button>
+                  )}
+                </div>
+                <input
+                  type={appSettings.isTinyfishSaved ? "text" : "password"}
+                  placeholder="..."
+                  value={appSettings.isTinyfishSaved ? "••••••••••••••••••••••••" : (appSettings.tinyfishApiKey || '')}
+                  onChange={(e) => setAppSettings({...appSettings, tinyfishApiKey: e.target.value})}
+                  disabled={appSettings.isTinyfishSaved}
+                  className="w-full border border-slate-300 rounded-md px-3 py-2 text-sm focus:border-[#0052D9] focus:ring-1 focus:ring-[#0052D9] outline-none disabled:bg-slate-50 disabled:text-slate-400"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden mt-6">
+            <div className="p-6 border-b border-slate-100 bg-slate-50/80 flex justify-between items-center">
+              <div>
+                <h3 className="text-[15px] font-semibold text-slate-800 flex items-center gap-2">
+                  <Users size={18} className="text-purple-600"/> {t('set.persona')}
+                </h3>
+                <p className="text-slate-500 text-sm mt-1.5 leading-relaxed">{t('set.personaDesc')}</p>
+              </div>
+              <button onClick={() => openPersonaModal()} className="px-4 py-1.5 bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 text-sm font-medium rounded-md transition flex items-center gap-2">
+                <Plus size={14}/> {t('set.add')}
+              </button>
+            </div>
+            <div className="p-6">
+              {personas.length === 0 ? (
+                <div className="text-sm text-slate-400 py-6 text-center border border-dashed border-slate-200 rounded-xl bg-slate-50/50">{t('set.noPersona')}</div>
+              ) : (
+                <div className="grid grid-cols-2 gap-4">
+                  {personas.map(p => (
+                    <div key={p.id} className="border border-slate-200 rounded-xl p-4 bg-white hover:border-purple-300 hover:shadow-sm transition-all group relative">
+                      <div className="flex items-start gap-3">
+                        <div className="w-8 h-8 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center shrink-0">
+                          <User size={14} />
+                        </div>
+                        <div className="pr-8">
+                          <h4 className="font-semibold text-slate-800 text-[13px] mb-1.5">{p.name}</h4>
+                          <p className="text-xs text-slate-500 leading-relaxed">{p.description}</p>
+                        </div>
+                      </div>
+                      <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col gap-1.5">
+                        <button onClick={() => openPersonaModal(p)} className="p-1.5 text-slate-400 hover:text-purple-600 bg-slate-50 hover:bg-purple-50 rounded"><Edit3 size={14}/></button>
+                        <button onClick={() => setDeleteConfirm({ open: true, type: 'persona', payload: p.id, name: p.name })} className="p-1.5 text-slate-400 hover:text-red-600 bg-slate-50 hover:bg-red-50 rounded"><Trash2 size={14}/></button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+            <div className="p-6 border-b border-slate-100 bg-slate-50/80">
+              <h3 className="text-[15px] font-semibold text-slate-800 flex items-center gap-2">
+                <FileText size={18} className="text-[#0052D9]"/> {t('set.categoryRules')}
+              </h3>
+              <p className="text-slate-500 text-sm mt-1.5 leading-relaxed">{t('set.categoryRulesDesc')}</p>
+            </div>
+
+            <div className="p-6">
+              <div className="flex flex-wrap gap-2 mb-8 border-b border-slate-200 pb-px items-center">
+                {categories.map(cat => (
+                  <div key={cat} className="relative group flex items-center">
+                    <button
+                      onClick={() => setActiveCategory(cat)}
+                      className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex items-center gap-2 ${
+                        activeCategory === cat
+                          ? 'border-[#0052D9] text-[#0052D9]'
+                          : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+                      }`}
+                    >
+                      {cat}
+                    </button>
+                    {cat !== '通用' && activeCategory === cat && (
+                      <button 
+                        onClick={() => setDeleteConfirm({ open: true, type: 'category', payload: cat, name: cat })}
+                        className="absolute right-0 top-1.5 p-1 text-slate-300 hover:text-red-500 bg-white rounded-full shadow-sm border border-slate-100 transition-colors"
+                      >
+                        <X size={12} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+                
+                {isAddingCategory ? (
+                  <div className="flex items-center gap-2 px-2 py-1 ml-2">
+                    <input 
+                      type="text" 
+                      value={newCategory}
+                      onChange={(e) => setNewCategory(e.target.value)}
+                      placeholder="..."
+                      className="border border-slate-300 rounded px-3 py-1.5 text-sm outline-none focus:border-[#0052D9] w-32 shadow-inner"
+                      autoFocus
+                      onKeyDown={(e) => e.key === 'Enter' && handleAddCategory()}
+                    />
+                    <button onClick={handleAddCategory} className="text-[#0052D9] text-sm font-medium hover:underline">{t('modal.save')}</button>
+                    <button onClick={() => setIsAddingCategory(false)} className="text-slate-400 text-sm hover:text-slate-600">{t('modal.cancel')}</button>
+                  </div>
+                ) : (
+                  <button 
+                    onClick={() => setIsAddingCategory(true)}
+                    className="px-3 py-2 text-sm font-medium text-slate-400 hover:text-[#0052D9] flex items-center gap-1.5 transition-colors ml-2"
+                  >
+                    <Plus size={14} /> {t('set.addCategory')}
+                  </button>
+                )}
+              </div>
+
+              <div className="space-y-10">
+                <div>
+                  <div className="flex justify-between items-end mb-4">
+                    <h4 className="text-[14px] font-bold text-slate-800 flex items-center gap-2 uppercase tracking-wide">
+                      <Edit3 size={16} className="text-[#0052D9]"/> {t('set.genRules')}
+                    </h4>
+                    <button onClick={() => openRuleModal('instruction')} className="text-[#0052D9] text-xs font-semibold hover:bg-blue-100 transition flex items-center gap-1 bg-blue-50 px-2.5 py-1.5 rounded-md">
+                      <Plus size={14}/> {t('modal.add')}
+                    </button>
+                  </div>
+                  <div className="space-y-3">
+                    {filteredRules.filter(r => r.type === 'instruction').length === 0 && (
+                      <div className="text-sm text-slate-400 py-6 text-center border border-dashed border-slate-200 rounded-xl bg-slate-50/50">{t('set.noGenRules')}</div>
+                    )}
+                    {filteredRules.filter(r => r.type === 'instruction').map(rule => (
+                      <div key={rule.id} className="p-4 border border-slate-200 rounded-xl bg-white hover:border-[#0052D9] hover:shadow-sm transition-all group cursor-default">
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-start gap-3 flex-1">
+                            <div className="w-2 h-2 rounded-full bg-[#0052D9] mt-1.5 shrink-0"></div>
+                            <div className="space-y-1.5 w-full">
+                              <span className="text-sm font-medium text-slate-800 block">{rule.name}</span>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Badge color="gray" className="flex items-center gap-1"><List size={10} /> {getSectionLabel(rule.targetSection)}</Badge>
+                                {rule.priority && (
+                                  <Badge color={rule.priority === 'Required' ? 'red' : 'blue'}>
+                                    {rule.priority === 'Required' ? t('modal.req') : t('modal.sug')}
+                                  </Badge>
+                                )}
+                                {rule.referenceAsins && rule.referenceAsins.length > 0 && (
+                                  <Badge color="gray" className="flex items-center gap-1">
+                                    <Archive size={10} /> {rule.referenceAsins.length}
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity ml-4 shrink-0">
+                            <button onClick={() => openRuleModal('instruction', rule)} className="p-1.5 text-slate-400 hover:text-[#0052D9] hover:bg-blue-50 rounded transition"><Edit3 size={14}/></button>
+                            <button onClick={() => setDeleteConfirm({ open: true, type: 'rule', payload: rule.id, name: rule.name })} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition"><Trash2 size={14}/></button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex justify-between items-end mb-4">
+                    <h4 className="text-[14px] font-bold text-slate-800 flex items-center gap-2 uppercase tracking-wide">
+                      <ShieldAlert size={16} className="text-red-500"/> {t('set.negRules')}
+                    </h4>
+                    <button onClick={() => openRuleModal('negative')} className="text-red-600 text-xs font-semibold hover:bg-red-100 transition flex items-center gap-1 bg-red-50 px-2.5 py-1.5 rounded-md">
+                      <Plus size={14}/> {t('modal.add')}
+                    </button>
+                  </div>
+                  <div className="space-y-3">
+                    {filteredRules.filter(r => r.type === 'negative').length === 0 && (
+                      <div className="text-sm text-slate-400 py-6 text-center border border-dashed border-slate-200 rounded-xl bg-slate-50/50">{t('set.noNegRules')}</div>
+                    )}
+                    {filteredRules.filter(r => r.type === 'negative').map(rule => (
+                      <div key={rule.id} className="p-4 border border-red-100 rounded-xl bg-red-50/30 hover:border-red-300 hover:shadow-sm transition-all group cursor-default">
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-start gap-3 flex-1">
+                            <div className="w-2 h-2 rounded-full bg-red-500 mt-1.5 shrink-0"></div>
+                            <div className="space-y-1.5 w-full">
+                              <span className="text-sm font-medium text-slate-800 block">{rule.name}</span>
+                              <div className="flex items-center gap-2">
+                                <Badge color="gray" className="flex items-center gap-1"><List size={10} /> {getSectionLabel(rule.targetSection)}</Badge>
+                                <Badge color={rule.severity === 'Critical' ? 'red' : 'orange'}>{rule.severity}</Badge>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity ml-4 shrink-0">
+                            <button onClick={() => openRuleModal('negative', rule)} className="p-1.5 text-slate-400 hover:text-[#0052D9] bg-white hover:bg-blue-50 rounded shadow-sm border border-slate-100"><Edit3 size={14}/></button>
+                            <button onClick={() => setDeleteConfirm({ open: true, type: 'rule', payload: rule.id, name: rule.name })} className="p-1.5 text-slate-400 hover:text-red-600 bg-white hover:bg-red-50 rounded shadow-sm border border-slate-100"><Trash2 size={14}/></button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 画像编辑弹窗 */}
+        {personaModal.open && (
+          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center animate-in fade-in overflow-y-auto py-10">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in zoom-in-95 my-auto">
+              <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                <h3 className="font-bold text-slate-800">
+                  {personaModal.data ? t('modal.edit') : t('modal.add')}
+                </h3>
+                <button onClick={() => setPersonaModal({ open: false, data: null })} className="text-slate-400 hover:text-slate-600 transition">
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="p-6 space-y-5">
+                <div>
+                  <label className="block text-[13px] font-medium text-slate-700 mb-1.5">{t('modal.name')}</label>
+                  <input 
+                    autoFocus
+                    required
+                    value={formPersona.name}
+                    onChange={e => setFormPersona({...formPersona, name: e.target.value})}
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-[#0052D9] focus:ring-1 focus:ring-[#0052D9] outline-none shadow-inner"
+                  />
+                </div>
+                <div>
+                  <div className="flex justify-between items-end mb-1.5">
+                    <label className="block text-[13px] font-medium text-slate-700">{t('modal.personaDesc')}</label>
+                    <button onClick={handleOptimizePersona} disabled={isOptimizingPersona} className="text-xs text-purple-600 hover:text-purple-700 flex items-center gap-1 transition-opacity disabled:opacity-50">
+                      <Sparkles size={12} className={isOptimizingPersona ? "animate-pulse" : ""} /> {isOptimizingPersona ? t('ai.optimizing') : t('ai.optimize')}
+                    </button>
+                  </div>
+                  <textarea 
+                    required
+                    rows={4}
+                    value={formPersona.description}
+                    onChange={e => setFormPersona({...formPersona, description: e.target.value})}
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-purple-400 focus:ring-1 focus:ring-purple-400 outline-none resize-none shadow-inner transition-all"
+                  />
+                </div>
+                <div className="pt-4 pb-2 flex justify-end gap-3">
+                  <button 
+                    onClick={() => setPersonaModal({ open: false, data: null })}
+                    className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-md transition"
+                  >
+                    {t('modal.cancel')}
+                  </button>
+                  <button 
+                    onClick={savePersona}
+                    disabled={!formPersona.name.trim() || !formPersona.description.trim() || isOptimizingPersona}
+                    className="px-5 py-2 text-sm font-medium text-white bg-[#0052D9] hover:bg-blue-800 rounded-md shadow-sm disabled:opacity-50 transition"
+                  >
+                    {t('modal.save')}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 规则编辑弹窗 */}
+        {ruleModal.open && (
+          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center animate-in fade-in overflow-y-auto py-10">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in zoom-in-95 my-auto">
+              <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                <h3 className="font-bold text-slate-800">
+                  {ruleModal.data ? t('modal.edit') : t('modal.add')}
+                </h3>
+                <button onClick={() => setRuleModal({ open: false, type: 'instruction', data: null })} className="text-slate-400 hover:text-slate-600 transition">
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="p-6 space-y-5">
+                <div>
+                  <div className="flex justify-between items-end mb-1.5">
+                    <label className="block text-[13px] font-medium text-slate-700">{t('modal.prompt')}</label>
+                    <button onClick={handleOptimizeRule} disabled={isOptimizingRule} className="text-xs text-[#0052D9] hover:text-blue-700 flex items-center gap-1 transition-opacity disabled:opacity-50">
+                      <Sparkles size={12} className={isOptimizingRule ? "animate-pulse" : ""} /> {isOptimizingRule ? t('ai.optimizing') : t('ai.optimize')}
+                    </button>
+                  </div>
+                  <textarea 
+                    autoFocus
+                    required
+                    rows={3}
+                    value={formRule.name}
+                    onChange={e => setFormRule({...formRule, name: e.target.value})}
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-[#0052D9] focus:ring-1 focus:ring-[#0052D9] outline-none resize-none shadow-inner transition-all"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[13px] font-medium text-slate-700 mb-1.5">{t('modal.scope')}</label>
+                  <select 
+                    value={formRule.targetSection}
+                    onChange={e => setFormRule({...formRule, targetSection: e.target.value})}
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-[#0052D9] focus:ring-1 focus:ring-[#0052D9] outline-none bg-white"
+                  >
+                    <option value="all">{t('modal.scopeAll')}</option>
+                    <option value="title">{t('section.title')}</option>
+                    <option value="bullets">{t('section.bullets')}</option>
+                    <option value="description">{t('section.desc')}</option>
+                  </select>
+                </div>
+                
+                {ruleModal.type === 'instruction' && (
+                  <div className="space-y-5 border-t border-slate-100 pt-5">
+                    <div>
+                      <label className="block text-[13px] font-medium text-slate-700 mb-1.5">{t('modal.priority')}</label>
+                      <select 
+                        value={formRule.priority}
+                        onChange={e => setFormRule({...formRule, priority: e.target.value})}
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-[#0052D9] focus:ring-1 focus:ring-[#0052D9] outline-none bg-white"
+                      >
+                        <option value="Required">{t('modal.req')}</option>
+                        <option value="Suggested">{t('modal.sug')}</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[13px] font-medium text-slate-700 mb-1.5">{t('modal.ref')}</label>
+                      
+                      {formRule.referenceAsins.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mb-2">
+                          {formRule.referenceAsins.map(asin => (
+                            <span key={asin} className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-slate-100 text-slate-700 border border-slate-200 text-xs font-medium">
+                              <Archive size={10} /> {asin}
+                              <X size={12} className="ml-1 cursor-pointer hover:text-slate-900" onClick={() => removeReferenceAsin(asin)} />
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      <select 
+                        value=""
+                        onChange={e => addReferenceAsin(e.target.value)}
+                        disabled={formRule.referenceAsins.length >= 3}
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-[#0052D9] focus:ring-1 focus:ring-[#0052D9] outline-none bg-white disabled:bg-slate-50 disabled:text-slate-400"
+                      >
+                        <option value="" disabled>
+                          {formRule.referenceAsins.length >= 3 ? "Max 3" : "..."}
+                        </option>
+                        {archivedTasks.filter(taskObj => !formRule.referenceAsins.includes(taskObj.asin)).map(taskObj => (
+                          <option key={taskObj.id} value={taskObj.asin}>{taskObj.asin} - {taskObj.name || 'N/A'}</option>
+                        ))}
+                      </select>
+                      <p className="text-xs text-slate-500 mt-1.5">{t('modal.refDesc')}</p>
+                    </div>
+                  </div>
+                )}
+                
+                {ruleModal.type === 'negative' && (
+                  <div className="border-t border-slate-100 pt-5">
+                    <label className="block text-[13px] font-medium text-slate-700 mb-1.5">{t('modal.severity')}</label>
+                    <select 
+                      value={formRule.severity}
+                      onChange={e => setFormRule({...formRule, severity: e.target.value})}
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-[#0052D9] focus:ring-1 focus:ring-[#0052D9] outline-none bg-white"
+                    >
+                      <option value="Critical">{t('modal.crit')}</option>
+                      <option value="High">{t('modal.high')}</option>
+                    </select>
+                  </div>
+                )}
+                
+                <div className="pt-4 pb-2 flex justify-end gap-3">
+                  <button 
+                    onClick={() => setRuleModal({ open: false, type: 'instruction', data: null })}
+                    className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-md transition"
+                  >
+                    {t('modal.cancel')}
+                  </button>
+                  <button 
+                    onClick={saveRule}
+                    disabled={!formRule.name.trim() || isOptimizingRule}
+                    className="px-5 py-2 text-sm font-medium text-white bg-[#0052D9] hover:bg-blue-800 rounded-md shadow-sm disabled:opacity-50 transition"
+                  >
+                    {t('modal.save')}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 二次确认删除弹窗 */}
+        {deleteConfirm.open && (
+          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[60] flex items-center justify-center animate-in fade-in">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95">
+              <div className="p-6">
+                <h3 className="font-bold text-slate-800 mb-2">{t('modal.delete')}</h3>
+                <p className="text-sm text-slate-600">{t('modal.deleteConfirm')}</p>
+                <div className="pt-5 flex justify-end gap-3">
+                  <button 
+                    onClick={() => setDeleteConfirm({ open: false, type: '', payload: null, name: '' })} 
+                    className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-md"
+                  >
+                    {t('modal.cancel')}
+                  </button>
+                  <button 
+                    onClick={executeDelete} 
+                    className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md"
+                  >
+                    {t('modal.delete')}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+      </div>
+
+      {/* 底部全局保存栏 */}
+      <div className="bg-white border-t border-slate-200 px-8 py-4 flex justify-end items-center shrink-0 shadow-[0_-4px_6px_-1px_rgb(0,0,0,0.05)] z-10 relative">
+        <button
+          onClick={handleGlobalSave}
+          className="px-6 py-2.5 bg-[#0052D9] text-white text-sm font-medium rounded-lg hover:bg-blue-800 transition flex items-center gap-2 shadow-sm"
+        >
+          {isSavingGlobal ? <Loader2 size={16} className="animate-spin" /> : (globalSaved ? <Check size={16} /> : <Save size={16} />)}
+          {globalSaved ? t('global.saved') : t('global.save')}
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// ==========================================
+// 主应用入口
+// ==========================================
+export default function App() {
+  const [tasks, setTasks] = useState(INITIAL_TASKS);
+  const [categories, setCategories] = useState(INITIAL_CATEGORIES);
+  const [rules, setRules] = useState(INITIAL_RULES);
+  const [personas, setPersonas] = useState(INITIAL_PERSONAS);
+  
+  const [appSettings, setAppSettings] = useState({ 
+    model: 'gpt-4o', 
+    apiKey: '', 
+    isSaved: false,
+    systemLanguage: 'zh',
+    targetLanguage: 'de',
+    translationLang: 'en',
+    tinyfishApiKey: '',
+    isTinyfishSaved: false
+  });
+  
+  const t = useCallback((key) => DICT[appSettings.systemLanguage]?.[key] || DICT['en'][key] || key, [appSettings.systemLanguage]);
+
+  const [activeTaskId, setActiveTaskId] = useState(INITIAL_TASKS[0].id);
+  const [view, setView] = useState('workspace'); 
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [newTaskAsin, setNewTaskAsin] = useState('');
+  const [newTaskUrl, setNewTaskUrl] = useState('');
+  const [newTaskCategory, setNewTaskCategory] = useState('通用');
+
+  const activeTask = tasks.find(tObj => tObj.id === activeTaskId);
+
+  const updateTask = useCallback((id, updates) => {
+    setTasks(prevTasks => prevTasks.map(tObj => tObj.id === id ? { ...tObj, ...updates } : tObj));
+  }, []);
+
+  const handleCreateTask = (e) => {
+    e.preventDefault();
+    if (!newTaskAsin.trim()) return;
+
+    const newTask = {
+      id: Date.now().toString(),
+      asin: newTaskAsin.toUpperCase(),
+      name: '', 
+      category: newTaskCategory,
+      language: appSettings.targetLanguage, 
+      personaIds: [],
+      url: newTaskUrl.trim(),
+      status: 'pending' 
+    };
+    setTasks([newTask, ...tasks]);
+    setActiveTaskId(newTask.id);
+    setView('workspace');
+    setIsModalOpen(false);
+    setNewTaskAsin('');
+    setNewTaskUrl('');
+    setNewTaskCategory('通用');
+  };
+
+  const filterBySearch = (tObj) => tObj.asin.toLowerCase().includes(searchTerm.toLowerCase()) || (tObj.name && tObj.name.toLowerCase().includes(searchTerm.toLowerCase()));
+  const activeQueue = tasks.filter(tObj => ['pending', 'fetched', 'review'].includes(tObj.status) && filterBySearch(tObj));
+  const archivedQueue = tasks.filter(tObj => tObj.status === 'archived' && filterBySearch(tObj));
+
+  return (
+    <div className="h-screen flex bg-[#F7F9FC] font-sans text-slate-900 overflow-hidden">
+      
+      <div className="w-64 bg-white border-r border-slate-200 flex flex-col shrink-0 z-20 shadow-sm">
+        <div className="p-5 border-b border-slate-100 flex items-center gap-2">
+          <Zap size={22} className="text-[#0052D9] fill-current" />
+          <h1 className="text-lg font-bold tracking-tight text-[#0052D9]">{t('app.title')}</h1>
+        </div>
+
+        <div className="p-4 border-b border-slate-100 bg-slate-50/50">
+          <button 
+            onClick={() => setIsModalOpen(true)}
+            className="w-full bg-[#0052D9] text-white py-2 rounded-md text-[13px] font-semibold hover:bg-blue-800 transition flex justify-center items-center gap-2 shadow-sm"
+          >
+            <Plus size={16} /> {t('sidebar.newTask')}
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto flex flex-col">
+          <div className="p-3 border-b border-slate-100 shrink-0 sticky top-0 bg-white z-10">
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input 
+                type="text" 
+                placeholder={t('sidebar.search')} 
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-8 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-md text-xs focus:ring-1 focus:ring-[#0052D9] outline-none transition-all shadow-inner"
+              />
+            </div>
+          </div>
+
+          <div className="py-4 flex-1 overflow-y-auto">
+            <SidebarGroup title={t('sidebar.review')} queue={activeQueue} icon={LayoutDashboard} view={view} activeTaskId={activeTaskId} setActiveTaskId={setActiveTaskId} setView={setView} />
+            <SidebarGroup title={t('sidebar.archived')} queue={archivedQueue} icon={Archive} view={view} activeTaskId={activeTaskId} setActiveTaskId={setActiveTaskId} setView={setView} />
+            {tasks.filter(filterBySearch).length === 0 && <div className="text-xs text-center text-slate-400 py-6">{t('sidebar.noResults')}</div>}
+          </div>
+        </div>
+
+        <div className="p-3 border-t border-slate-100 bg-slate-50 shrink-0">
+          <button
+            onClick={() => setView('rules')}
+            className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition flex items-center gap-2.5 ${
+              view === 'rules' ? 'bg-blue-100 text-[#0052D9]' : 'text-slate-600 hover:bg-white hover:shadow-sm border border-transparent'
+            }`}
+          >
+            <Settings size={16} />
+            {t('sidebar.settings')}
+          </button>
+        </div>
+      </div>
+
+      <div className="flex-1 flex flex-col min-w-0">
+        {view === 'workspace' ? (
+          <Workspace 
+            task={activeTask} 
+            updateTask={updateTask} 
+            categories={categories}
+            personas={personas}
+            appSettings={appSettings} 
+            setAppSettings={setAppSettings} 
+            t={t}
+          />
+        ) : (
+          <SettingsAndRules 
+            categories={categories} 
+            setCategories={setCategories}
+            rules={rules}
+            setRules={setRules}
+            personas={personas}
+            setPersonas={setPersonas}
+            appSettings={appSettings}
+            setAppSettings={setAppSettings}
+            tasks={tasks}
+            t={t}
+          />
+        )}
+      </div>
+
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center animate-in fade-in overflow-y-auto py-10">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 my-auto">
+            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+              <h3 className="font-bold text-slate-800">{t('modal.createTask')}</h3>
+              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 text-2xl leading-none font-light transition">
+                <X size={20} />
+              </button>
+            </div>
+            <form onSubmit={handleCreateTask} className="p-6 space-y-4">
+              <div>
+                <label className="block text-[13px] font-medium text-slate-700 mb-1.5">{t('modal.asin')}</label>
+                <input 
+                  type="text" 
+                  autoFocus
+                  required
+                  placeholder="e.g. B09X1Y2Z3W"
+                  value={newTaskAsin}
+                  onChange={e => setNewTaskAsin(e.target.value)}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-[#0052D9] outline-none shadow-inner"
+                />
+              </div>
+              <div>
+                <label className="block text-[13px] font-medium text-slate-700 mb-1.5">{t('modal.url')}</label>
+                <input 
+                  type="url" 
+                  placeholder={t('modal.urlPlaceholder')}
+                  value={newTaskUrl}
+                  onChange={e => setNewTaskUrl(e.target.value)}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-[#0052D9] outline-none shadow-inner"
+                />
+              </div>
+              <div>
+                <label className="block text-[13px] font-medium text-slate-700 mb-1.5">{t('modal.category')}</label>
+                <select 
+                  value={newTaskCategory}
+                  onChange={e => setNewTaskCategory(e.target.value)}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-[#0052D9] outline-none bg-white shadow-inner"
+                >
+                  {categories.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="pt-4 flex justify-end gap-3 border-t border-slate-100">
+                <button 
+                  type="button" 
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-md transition"
+                >
+                  {t('modal.cancel')}
+                </button>
+                <button 
+                  type="submit"
+                  className="px-5 py-2 text-sm font-medium text-white bg-[#0052D9] hover:bg-blue-800 rounded-md transition shadow-sm"
+                >
+                  {t('modal.create')}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+}

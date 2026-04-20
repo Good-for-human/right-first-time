@@ -1,0 +1,23 @@
+# Dependencies & build
+node_modules/
+dist/
+
+# Local / secrets
+.env
+.env.*
+!.env.example
+
+# Spreadsheets (often local / confidential)
+*.xlsx
+*.xls
+
+# Editor & OS
+.DS_Store
+Thumbs.db
+*.log
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Vite / TS cache
+*.tsbuildinfo

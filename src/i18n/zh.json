@@ -1,0 +1,118 @@
+{
+  "app": {
+    "title": "Right First Time"
+  },
+  "sidebar": {
+    "newTask": "新建任务",
+    "search": "搜索 ASIN 或品名...",
+    "review": "待审核",
+    "archived": "已审核",
+    "noResults": "无结果",
+    "settings": "系统设置"
+  },
+  "status": {
+    "review": "待审核",
+    "archived": "已审核",
+    "pending": "待抓取",
+    "fetched": "已抓取"
+  },
+  "ws": {
+    "source": "原始数据",
+    "aiWorkspace": "AI 工作区",
+    "translation": "翻译",
+    "genSettings": "生成设置",
+    "globalRegen": "全局重写",
+    "report": "评估报告",
+    "risk": "风险",
+    "diffFromBaseline": "与原始抓取数据的差异（当前目标语种正文）"
+  },
+  "score": {
+    "clarity": "可读性",
+    "completeness": "完整度",
+    "searchability": "规范度",
+    "compliance": "合规"
+  },
+  "btn": {
+    "approve": "入库",
+    "archivedBtn": "已入库",
+    "withdrawReview": "撤回审核",
+    "regenerate": "AI 重写",
+    "regenerating": "生成中..."
+  },
+  "section": {
+    "title": "商品标题",
+    "bullets": "卖点描述",
+    "desc": "产品描述"
+  },
+  "target": {
+    "lang": "目标"
+  },
+  "lang": {
+    "en": "英文",
+    "zh": "中文"
+  },
+  "set": {
+    "title": "配置与规则",
+    "desc": "管理系统配置、大模型参数及 AI 规则（画像、生成规则、风控红线）。",
+    "lang": "语言设置",
+    "sysLang": "系统语言",
+    "targetLang": "默认目标语言",
+    "targetLangDesc": "新建任务的默认语言。",
+    "model": "大模型配置",
+    "defaultModel": "默认模型",
+    "apiKey": "API 密钥 (本地存储)",
+    "modifyKey": "修改密钥",
+    "fetchConfig": "数据抓取接口 (Tinyfish API)",
+    "tinyfishKey": "Tinyfish API 密钥",
+    "tinyfishDesc": "调用 Tinyfish API 实时抓取亚马逊和 TP-Link 官网的最新数据结构。",
+    "persona": "用户画像库",
+    "personaDesc": "管理目标受众标签。AI 优化时将基于选定的画像调整文案的专业度与语气。",
+    "add": "新增",
+    "noPersona": "暂无画像",
+    "categoryRules": "类目规则库",
+    "categoryRulesDesc": "规则按类目隔离。AI 生成时将组合使用：[用户画像]设定语境 → [生成规则]指引输出 → [风控红线]校验违规。",
+    "addCategory": "新建类目",
+    "genRules": "生成规则",
+    "negRules": "风控红线",
+    "noGenRules": "暂无生成规则",
+    "noNegRules": "暂无风控红线"
+  },
+  "modal": {
+    "createTask": "新建任务",
+    "asin": "输入 ASIN",
+    "url": "参考链接 URL (可选)",
+    "urlPlaceholder": "支持 TP-Link 官网或亚马逊链接...",
+    "category": "所属类目",
+    "cancel": "取消",
+    "create": "创建并生成",
+    "save": "保存",
+    "confirmSave": "确定保存",
+    "edit": "编辑",
+    "add": "添加",
+    "name": "名称",
+    "personaDesc": "画像偏好描述",
+    "prompt": "执行指令",
+    "scope": "生效范围",
+    "scopeAll": "全部",
+    "priority": "优先级",
+    "req": "必须执行",
+    "sug": "建议采纳",
+    "ref": "参考标杆 ASIN",
+    "refDesc": "提供参考样本。",
+    "severity": "风险级别",
+    "crit": "Critical (阻断)",
+    "high": "High (高危)",
+    "delete": "确认删除",
+    "deleteConfirm": "确定删除吗？此操作无法撤销。"
+  },
+  "global": {
+    "save": "保存到云端",
+    "saving": "正在保存…",
+    "saved": "已同步到 Firestore",
+    "saveFailed": "保存失败"
+  },
+  "ai": {
+    "optimize": "AI 优化 (COSMO标准)",
+    "optimizing": "正在优化..."
+  }
+}
