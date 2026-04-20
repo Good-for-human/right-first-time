@@ -103,7 +103,8 @@
     "crit": "Critical (阻断)",
     "high": "High (高危)",
     "delete": "确认删除",
-    "deleteConfirm": "确定删除吗？此操作无法撤销。"
+    "deleteConfirm": "确定删除吗？此操作无法撤销。",
+    "ruleSaveUnder": "将保存至「{{category}}」：仅在对应标签下列出本规则（与「通用」规则分开存放）。"
   },
   "global": {
     "save": "保存到云端",

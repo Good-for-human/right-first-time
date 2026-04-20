@@ -103,7 +103,8 @@
     "crit": "Critical (Block)",
     "high": "High (Warning)",
     "delete": "Confirm Deletion",
-    "deleteConfirm": "Are you sure to delete? This cannot be undone."
+    "deleteConfirm": "Are you sure to delete? This cannot be undone.",
+    "ruleSaveUnder": "Will save under “{{category}}”: listed only in that tab (separate from global rules)."
   },
   "global": {
     "save": "Save to cloud",
