@@ -6,8 +6,8 @@ export const SUPPORTED_LLM_MODELS: LLMModel[] = [
   'gpt-5.4-pro',
   'claude-3-5-haiku',
   'claude-3-7-sonnet',
-  'gemini-3.1-flash',
-  'gemini-3.1-pro',
+  'gemini-2.5-flash',
+  'gemini-2.5-pro',
 ];
 
 const LEGACY_MAP: Record<string, LLMModel> = {
@@ -16,15 +16,18 @@ const LEGACY_MAP: Record<string, LLMModel> = {
   'gpt-4.1-mini': 'gpt-5.3-chat-latest',
   'o4-mini': 'gpt-5.3-chat-latest',
   'claude-3-5-sonnet': 'claude-3-7-sonnet',
-  'gemini-2-0-flash': 'gemini-3.1-flash',
-  'gemini-1-5-pro': 'gemini-3.1-pro',
-  'gemini-1-5-flash': 'gemini-3.1-flash',
-  'gemini-2-5-flash': 'gemini-3.1-flash',
-  'gemini-2-5-pro': 'gemini-3.1-pro',
-  'gemini-2.5-flash': 'gemini-3.1-flash',
-  'gemini-2.5-pro': 'gemini-3.1-pro',
-  'gemini-3.1-flash-preview': 'gemini-3.1-flash',
-  'gemini-3.1-pro-preview': 'gemini-3.1-pro',
+  'gemini-1-5-flash': 'gemini-2.5-flash',
+  'gemini-1-5-pro': 'gemini-2.5-pro',
+  'gemini-1.5-flash': 'gemini-2.5-flash',
+  'gemini-1.5-pro': 'gemini-2.5-pro',
+  'gemini-2-0-flash': 'gemini-2.5-flash',
+  'gemini-2.0-flash': 'gemini-2.5-flash',
+  'gemini-2-5-flash': 'gemini-2.5-flash',
+  'gemini-2-5-pro': 'gemini-2.5-pro',
+  'gemini-3.1-flash': 'gemini-2.5-flash',
+  'gemini-3.1-pro': 'gemini-2.5-pro',
+  'gemini-3.1-flash-preview': 'gemini-2.5-flash',
+  'gemini-3.1-pro-preview': 'gemini-2.5-pro',
 };
 
 const DEFAULT_MODEL: LLMModel = 'gpt-5.3-chat-latest';

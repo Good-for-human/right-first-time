@@ -9,8 +9,8 @@ const MODEL_PROVIDERS: Record<LLMModel, LLMProvider> = {
   'gpt-5.4-pro':         'openai',
   'claude-3-7-sonnet':   'anthropic',
   'claude-3-5-haiku':    'anthropic',
-  'gemini-3.1-pro':   'google',
-  'gemini-3.1-flash': 'google',
+  'gemini-2.5-pro':   'google',
+  'gemini-2.5-flash': 'google',
 };
 
 // Canonical OpenAI / Google API model IDs (see platform.openai.com & ai.google.dev)
@@ -19,14 +19,14 @@ const MODEL_IDS: Record<LLMModel, string> = {
   'gpt-5.4-pro':         'gpt-5.4-pro',
   'claude-3-7-sonnet':   'claude-3-7-sonnet-20250219',
   'claude-3-5-haiku':    'claude-3-5-haiku-20241022',
-  'gemini-3.1-pro':   'gemini-3.1-pro',
-  'gemini-3.1-flash': 'gemini-3.1-flash',
+  'gemini-2.5-pro':   'gemini-2.5-pro',
+  'gemini-2.5-flash': 'gemini-2.5-flash',
 };
 
-// Gemini generateContent is typically called on v1beta; stable model IDs omit -preview suffix
+// Gemini generateContent runs on v1beta for the 2.5 family
 const GOOGLE_API_VERSION: Partial<Record<LLMModel, 'v1' | 'v1beta'>> = {
-  'gemini-3.1-pro':   'v1beta',
-  'gemini-3.1-flash': 'v1beta',
+  'gemini-2.5-pro':   'v1beta',
+  'gemini-2.5-flash': 'v1beta',
 };
 
 // ── Error parsing ─────────────────────────────────────────────
@@ -36,14 +36,14 @@ export function parseLLMError(err: unknown): string {
 
   // 503 / UNAVAILABLE — Google capacity (often temporary; not specific to target language)
   if (raw.includes('503') || raw.includes('UNAVAILABLE') || raw.includes('high demand')) {
-    return 'Google 模型当前负载过高（503 / 暂时不可用），通常几分钟内会恢复。\n已自动重试仍失败时：请稍后再点「翻译」，或在设置中改用 Gemini 3.1 Flash。';
+    return 'Google 模型当前负载过高（503 / 暂时不可用），通常几分钟内会恢复。\n已自动重试仍失败时：请稍后再点「翻译」，或在设置中改用 Gemini 2.5 Flash。';
   }
   // 429 quota / rate limit
   if (raw.includes('429')) {
     if (raw.includes('FreeTier') || raw.includes('free_tier') || raw.includes('limit: 0')) {
-      return '该模型免费层配额已耗尽（limit: 0）。\n建议：\n• 切换到 Gemini 3.1 Flash\n• 或前往 Google AI Studio 开启付费后使用 Gemini 3.1 Pro';
+      return '该模型免费层配额已耗尽（limit: 0）。\n建议：\n• 切换到 Gemini 2.5 Flash\n• 或前往 Google AI Studio 开启付费后使用 Gemini 2.5 Pro';
     }
-    return 'API 请求频率超限 (429)。请稍后片刻再试，或换用 GPT-5.3 Chat / Gemini 3.1 Flash 等轻量模型。';
+    return 'API 请求频率超限 (429)。请稍后片刻再试，或换用 GPT-5.3 Chat / Gemini 2.5 Flash 等轻量模型。';
   }
   // 401 / 403 invalid key
   if (raw.includes('401') || raw.includes('403') || raw.includes('invalid') || raw.includes('Unauthorized')) {
@@ -51,7 +51,7 @@ export function parseLLMError(err: unknown): string {
   }
   // 404 model not found
   if (raw.includes('404') || raw.includes('NOT_FOUND')) {
-    return '模型 ID 不存在或你的账号暂无访问权限 (404)。\n建议改用：Gemini 3.1 Flash 或 GPT-5.3 Chat；也可在 Google AI Studio 的 ListModels 中核对当前账号可用模型名。';
+    return '模型 ID 不存在或你的账号暂无访问权限 (404)。\n建议改用：Gemini 2.5 Flash 或 GPT-5.3 Chat；也可在 Google AI Studio 的 ListModels 中核对当前账号可用模型名。';
   }
   // Network / CORS
   if (raw.includes('Failed to fetch') || raw.includes('NetworkError')) {
@@ -310,7 +310,7 @@ export async function analyzeProductImages(
   const provider = MODEL_PROVIDERS[model];
 
   if (provider !== 'google') {
-    throw new Error('图片理解仅支持 Google Gemini 模型（请在设置中选择 Gemini 3.1 Flash 或 Gemini 3.1 Pro）。');
+    throw new Error('图片理解仅支持 Google Gemini 模型（请在设置中选择 Gemini 2.5 Flash 或 Gemini 2.5 Pro）。');
   }
 
   const modelId = MODEL_IDS[model];

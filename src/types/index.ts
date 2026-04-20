@@ -12,8 +12,8 @@ export type LLMModel =
   | 'gpt-5.4-pro'
   | 'claude-3-5-haiku'
   | 'claude-3-7-sonnet'
-  | 'gemini-3.1-flash'
-  | 'gemini-3.1-pro';
+  | 'gemini-2.5-flash'
+  | 'gemini-2.5-pro';
 export type ContentKey = 'title' | 'bullets' | 'description';
 export type TargetSection = ContentKey | 'all';
 export type RuleType = 'instruction' | 'negative';

@@ -87,11 +87,11 @@ export function LLMConfig({ appSettings, onChange }: LLMConfigProps) {
               <option value="claude-3-7-sonnet">Claude 3.7 Sonnet · 性能高</option>
             </optgroup>
             <optgroup label="Google">
-              <option value="gemini-3.1-flash" title="API: gemini-3.1-flash">
-                Gemini 3.1 Flash · 速度快
+              <option value="gemini-2.5-flash" title="API: gemini-2.5-flash">
+                Gemini 2.5 Flash · 速度快
               </option>
-              <option value="gemini-3.1-pro" title="API: gemini-3.1-pro">
-                Gemini 3.1 Pro · 性能高
+              <option value="gemini-2.5-pro" title="API: gemini-2.5-pro">
+                Gemini 2.5 Pro · 性能高
               </option>
             </optgroup>
           </select>
