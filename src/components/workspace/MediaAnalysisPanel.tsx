@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import type { Task, AppSettings, Rule } from '@/types';
 import { analyzeProductImages, parseLLMError } from '@/services/llm';
+import { normalizeProductImageUrl, remoteProductImgProps } from '@/lib/remoteImage';
 
 interface MediaAnalysisPanelProps {
   task: Task;
@@ -60,7 +61,9 @@ export function MediaAnalysisPanel({ task, appSettings, rules }: MediaAnalysisPa
   const [imgAnalysisError,   setImgAnalysisError]   = useState<string | null>(null);
 
   const specs  = task.specs  ?? {};
-  const images = (task.images ?? []).filter((u) => u.startsWith('http'));
+  const images = (task.images ?? [])
+    .map((u) => normalizeProductImageUrl(u))
+    .filter((u) => u.startsWith('http'));
   const aplus  = task.aplus  ?? [];
 
   const hasSpecs  = Object.keys(specs).length > 0;
@@ -166,12 +169,13 @@ export function MediaAnalysisPanel({ task, appSettings, rules }: MediaAnalysisPa
                     href={src}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="group relative aspect-square rounded-lg overflow-hidden border border-slate-100 bg-slate-50 flex items-center justify-center hover:border-[#0052D9] transition"
+                    className="group relative aspect-square rounded-lg overflow-hidden border border-slate-100 bg-slate-50 block hover:border-[#0052D9] transition"
                   >
                     <img
+                      {...remoteProductImgProps}
                       src={src}
                       alt={`product-${i + 1}`}
-                      className="max-h-full max-w-full object-contain"
+                      className="h-full w-full min-h-0 min-w-0 object-contain"
                       onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                     />
                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition flex items-center justify-center">
@@ -229,17 +233,18 @@ export function MediaAnalysisPanel({ task, appSettings, rules }: MediaAnalysisPa
                   <div className="shrink-0 w-6 h-6 bg-[#0052D9]/10 text-[#0052D9] rounded-full flex items-center justify-center text-[11px] font-bold">
                     {i + 1}
                   </div>
-                  {mod.imageUrl && mod.imageUrl.startsWith('http') && (
+                  {mod.imageUrl && normalizeProductImageUrl(mod.imageUrl).startsWith('http') && (
                     <a
-                      href={mod.imageUrl}
+                      href={normalizeProductImageUrl(mod.imageUrl)}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="shrink-0 w-20 h-20 border border-slate-100 rounded-lg bg-white overflow-hidden flex items-center justify-center hover:border-[#0052D9] transition"
+                      className="shrink-0 w-20 h-20 border border-slate-100 rounded-lg bg-white overflow-hidden block hover:border-[#0052D9] transition"
                     >
                       <img
-                        src={mod.imageUrl}
+                        {...remoteProductImgProps}
+                        src={normalizeProductImageUrl(mod.imageUrl)}
                         alt=""
-                        className="max-h-full max-w-full object-contain"
+                        className="h-full w-full min-h-0 min-w-0 object-contain"
                         onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                       />
                     </a>

@@ -10,6 +10,7 @@ import {
   ALL_FETCH_FIELDS, FETCH_FIELD_LABELS,
   type FetchedListing, type FetchField,
 } from '@/services/tinyfish';
+import { normalizeProductImageUrl, remoteProductImgProps } from '@/lib/remoteImage';
 
 type Step = 'input' | 'fetching' | 'preview' | 'error';
 
@@ -134,7 +135,8 @@ export function CreateTaskModal({ categories, appSettings, onClose, onCreate }: 
     setErrorMsg('');
   };
 
-  const images   = fetched?.images?.filter((u) => u.startsWith('http')) ?? [];
+  const images =
+    fetched?.images?.map((u) => normalizeProductImageUrl(u)).filter((u) => u.startsWith('http')) ?? [];
   const hasSpecs = fetched?.specs && Object.keys(fetched.specs).length > 0;
   const hasAplus = fetched?.aplus && fetched.aplus.length > 0;
 
@@ -285,11 +287,12 @@ export function CreateTaskModal({ categories, appSettings, onClose, onCreate }: 
               <div className="col-span-2 space-y-2">
                 {images.length > 0 ? (
                   <>
-                    <div className="aspect-square rounded-xl border border-slate-100 bg-slate-50 overflow-hidden flex items-center justify-center">
+                    <div className="aspect-square rounded-xl border border-slate-100 bg-slate-50 overflow-hidden">
                       <img
+                        {...remoteProductImgProps}
                         src={images[imgIdx]}
                         alt="product"
-                        className="max-h-full max-w-full object-contain"
+                        className="h-full w-full min-h-0 min-w-0 object-contain"
                         onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                       />
                     </div>
@@ -303,8 +306,13 @@ export function CreateTaskModal({ categories, appSettings, onClose, onCreate }: 
                               i === imgIdx ? 'border-[#0052D9] ring-1 ring-[#0052D9]' : 'border-slate-200 hover:border-blue-300'
                             }`}
                           >
-                            <img src={src} alt="" className="max-h-full max-w-full object-contain"
-                              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                            <img
+                              {...remoteProductImgProps}
+                              src={src}
+                              alt=""
+                              className="h-full w-full min-h-0 min-w-0 object-contain"
+                              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                            />
                           </button>
                         ))}
                       </div>
@@ -404,9 +412,14 @@ export function CreateTaskModal({ categories, appSettings, onClose, onCreate }: 
                 <div className="space-y-4">
                   {fetched.aplus!.map((mod, i) => (
                     <div key={i} className="flex gap-4 p-3 bg-slate-50 rounded-lg border border-slate-100">
-                      {mod.imageUrl && (
-                        <img src={mod.imageUrl} alt="" className="w-20 h-20 object-contain rounded-md border border-slate-100 bg-white shrink-0"
-                          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                      {mod.imageUrl && normalizeProductImageUrl(mod.imageUrl).startsWith('http') && (
+                        <img
+                          {...remoteProductImgProps}
+                          src={normalizeProductImageUrl(mod.imageUrl)}
+                          alt=""
+                          className="w-20 h-20 min-h-0 min-w-0 object-contain rounded-md border border-slate-100 bg-white shrink-0"
+                          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                        />
                       )}
                       <div className="flex-1 min-w-0">
                         {mod.headline && <p className="text-[13px] font-semibold text-slate-700 mb-1">{mod.headline}</p>}
