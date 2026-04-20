@@ -24,7 +24,9 @@
     "globalRegen": "Regen All",
     "report": "Evaluation Report",
     "risk": "Risk",
-    "diffFromBaseline": "Diff vs scraped baseline (target language)"
+    "diffFromBaseline": "Diff vs scraped baseline (target language)",
+    "sourceConfirm": "Confirm sync to task",
+    "sourceDiscard": "Discard edits"
   },
   "score": {
     "clarity": "Clarity",
@@ -103,8 +105,7 @@
     "crit": "Critical (Block)",
     "high": "High (Warning)",
     "delete": "Confirm Deletion",
-    "deleteConfirm": "Are you sure to delete? This cannot be undone.",
-    "ruleSaveUnder": "Will save under “{{category}}”: listed only in that tab (separate from global rules)."
+    "deleteConfirm": "Are you sure to delete? This cannot be undone."
   },
   "global": {
     "save": "Save to cloud",

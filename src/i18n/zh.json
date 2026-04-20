@@ -24,7 +24,9 @@
     "globalRegen": "全局重写",
     "report": "评估报告",
     "risk": "风险",
-    "diffFromBaseline": "与原始抓取数据的差异（当前目标语种正文）"
+    "diffFromBaseline": "与原始抓取数据的差异（当前目标语种正文）",
+    "sourceConfirm": "确认同步到任务",
+    "sourceDiscard": "放弃修改"
   },
   "score": {
     "clarity": "可读性",
@@ -103,8 +105,7 @@
     "crit": "Critical (阻断)",
     "high": "High (高危)",
     "delete": "确认删除",
-    "deleteConfirm": "确定删除吗？此操作无法撤销。",
-    "ruleSaveUnder": "将保存至「{{category}}」：仅在对应标签下列出本规则（与「通用」规则分开存放）。"
+    "deleteConfirm": "确定删除吗？此操作无法撤销。"
   },
   "global": {
     "save": "保存到云端",

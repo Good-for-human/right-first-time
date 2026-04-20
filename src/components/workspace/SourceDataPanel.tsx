@@ -1,16 +1,12 @@
 /**
  * SourceDataPanel — left panel of the Workspace.
  *
- * Displays the raw product data fetched by TinyFish and lets the user
- * correct any extraction errors in-place. Edits are persisted back to
- * the Task (and therefore Firestore) on blur.
- *
- * Fields:
- *   Editable  — 商品标题, 五点描述, 产品描述
- *   Read-only — Brand, Price (currency auto-detected from URL), Specs,
- *               Images count, A+ count
+ * Shows TinyFish-scraped product data. Title / bullets / description can be
+ * edited locally; changes are NOT written to the task (or Firestore) until
+ * the user clicks "Confirm sync to task". Until then, persisted fields stay
+ * as the last saved / scraped state.
  */
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FileText, Tag, ImageOff, LayoutTemplate, Layers } from 'lucide-react';
 import type { Task } from '@/types';
@@ -19,6 +15,13 @@ import { detectCurrency, detectCurrencyFromPrice, formatPrice } from '@/lib/curr
 interface SourceDataPanelProps {
   task: Task;
   onUpdate: (updates: Partial<Task>) => void;
+}
+
+function bulletsFromRaw(raw: string): string[] {
+  return raw
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
 }
 
 // Auto-grow textarea helper
@@ -32,7 +35,7 @@ function AutoTextarea({
 }: {
   value: string;
   onChange: (v: string) => void;
-  onBlur: () => void;
+  onBlur?: () => void;
   placeholder?: string;
   minRows?: number;
   className?: string;
@@ -61,12 +64,9 @@ function AutoTextarea({
 
 export function SourceDataPanel({ task, onUpdate }: SourceDataPanelProps) {
   const { t } = useTranslation();
-  // Price symbol takes priority over URL domain for currency detection
   const currency = detectCurrencyFromPrice(task.price) ?? detectCurrency(task.url);
 
-  // ── Local editable state ────────────────────────────────────
-  // Initialised from task; reset when task.id changes (different task selected)
-  const [title, setTitle]         = useState(task.name ?? '');
+  const [title, setTitle] = useState(task.name ?? '');
   const [bulletsRaw, setBulletsRaw] = useState((task.bullets ?? []).join('\n\n'));
   const [description, setDescription] = useState(task.description ?? '');
 
@@ -76,33 +76,34 @@ export function SourceDataPanel({ task, onUpdate }: SourceDataPanelProps) {
     setDescription(task.description ?? '');
   }, [task.id]);
 
-  // ── Persist on blur ─────────────────────────────────────────
-  const saveTitle = () => {
-    if (title !== task.name) onUpdate({ name: title });
+  const draftBullets = useMemo(() => bulletsFromRaw(bulletsRaw), [bulletsRaw]);
+  const taskBullets = task.bullets ?? [];
+
+  const isDirty =
+    title !== (task.name ?? '') ||
+    JSON.stringify(draftBullets) !== JSON.stringify(taskBullets) ||
+    description !== (task.description ?? '');
+
+  const handleConfirmSync = () => {
+    const patch: Partial<Task> = {};
+    if (title !== (task.name ?? '')) patch.name = title;
+    if (JSON.stringify(draftBullets) !== JSON.stringify(taskBullets)) patch.bullets = draftBullets;
+    if (description !== (task.description ?? '')) patch.description = description;
+    if (Object.keys(patch).length > 0) onUpdate(patch);
   };
 
-  const saveBullets = () => {
-    const lines = bulletsRaw
-      .split('\n')
-      .map((l) => l.trim())
-      .filter(Boolean);
-    const current = task.bullets ?? [];
-    if (JSON.stringify(lines) !== JSON.stringify(current)) {
-      onUpdate({ bullets: lines });
-    }
+  const handleDiscard = () => {
+    setTitle(task.name ?? '');
+    setBulletsRaw((task.bullets ?? []).join('\n\n'));
+    setDescription(task.description ?? '');
   };
 
-  const saveDescription = () => {
-    if (description !== task.description) onUpdate({ description });
-  };
-
-  const hasSpecs  = task.specs  && Object.keys(task.specs).length  > 0;
+  const hasSpecs = task.specs && Object.keys(task.specs).length > 0;
   const hasImages = task.images && task.images.length > 0;
-  const hasAplus  = task.aplus  && task.aplus.length  > 0;
+  const hasAplus = task.aplus && task.aplus.length > 0;
 
   return (
-    <div className="w-[30%] bg-white border-r border-slate-200 flex flex-col h-full z-0 shadow-sm relative">
-      {/* Header */}
+    <div className="w-[30%] bg-white border-r border-slate-200 flex flex-col h-full z-0 shadow-sm relative min-h-0">
       <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-50 flex items-center gap-2 shrink-0">
         <FileText size={16} className="text-slate-500" />
         <h2 className="font-semibold text-slate-700 text-sm">{t('ws.source')}</h2>
@@ -111,10 +112,8 @@ export function SourceDataPanel({ task, onUpdate }: SourceDataPanelProps) {
         </span>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="flex-1 overflow-y-auto p-4 min-h-0">
         <div className="space-y-5 animate-in fade-in duration-500">
-
-          {/* Brand + Price row */}
           {(task.brand || task.price) && (
             <div className="flex items-center gap-3 flex-wrap">
               {task.brand && (
@@ -131,7 +130,6 @@ export function SourceDataPanel({ task, onUpdate }: SourceDataPanelProps) {
             </div>
           )}
 
-          {/* 商品标题 — editable */}
           <section>
             <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
               {t('section.title')}
@@ -139,13 +137,11 @@ export function SourceDataPanel({ task, onUpdate }: SourceDataPanelProps) {
             <AutoTextarea
               value={title}
               onChange={setTitle}
-              onBlur={saveTitle}
               placeholder="产品标题…"
               minRows={2}
             />
           </section>
 
-          {/* 五点描述 — editable (one bullet per line) */}
           <section>
             <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
               {t('section.bullets')}
@@ -156,13 +152,11 @@ export function SourceDataPanel({ task, onUpdate }: SourceDataPanelProps) {
             <AutoTextarea
               value={bulletsRaw}
               onChange={setBulletsRaw}
-              onBlur={saveBullets}
               placeholder="• Bullet 1&#10;• Bullet 2"
               minRows={4}
             />
           </section>
 
-          {/* 产品描述 — editable */}
           <section>
             <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
               {t('section.desc')}
@@ -170,20 +164,16 @@ export function SourceDataPanel({ task, onUpdate }: SourceDataPanelProps) {
             <AutoTextarea
               value={description}
               onChange={setDescription}
-              onBlur={saveDescription}
               placeholder="产品描述…"
               minRows={3}
             />
           </section>
 
-          {/* Specs — read-only table */}
           {hasSpecs && (
             <section>
               <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
                 <Layers size={11} /> Specs
-                <span className="text-slate-300 font-normal">
-                  {Object.keys(task.specs!).length} 项
-                </span>
+                <span className="text-slate-300 font-normal">{Object.keys(task.specs!).length} 项</span>
               </h4>
               <div className="bg-slate-50 border border-slate-100 rounded-lg overflow-hidden">
                 {Object.entries(task.specs!).map(([k, v], i) => (
@@ -201,7 +191,6 @@ export function SourceDataPanel({ task, onUpdate }: SourceDataPanelProps) {
             </section>
           )}
 
-          {/* Images count badge */}
           {hasImages && (
             <div className="flex items-center gap-2 text-[12px] text-slate-500">
               <ImageOff size={13} className="text-slate-400" />
@@ -209,7 +198,6 @@ export function SourceDataPanel({ task, onUpdate }: SourceDataPanelProps) {
             </div>
           )}
 
-          {/* A+ count badge */}
           {hasAplus && (
             <div className="flex items-center gap-2 text-[12px] text-slate-500">
               <LayoutTemplate size={13} className="text-slate-400" />
@@ -217,7 +205,6 @@ export function SourceDataPanel({ task, onUpdate }: SourceDataPanelProps) {
             </div>
           )}
 
-          {/* Empty state */}
           {!task.bullets?.length && !task.description && !hasSpecs && (
             <div className="text-center py-8 text-slate-400">
               <FileText size={28} className="mx-auto mb-2 opacity-30" />
@@ -225,6 +212,27 @@ export function SourceDataPanel({ task, onUpdate }: SourceDataPanelProps) {
               <p className="text-xs mt-1">通过 TinyFish 抓取产品页面后自动填充</p>
             </div>
           )}
+        </div>
+      </div>
+
+      <div className="shrink-0 border-t border-slate-100 bg-slate-50/90 px-4 py-3">
+        <div className="flex flex-wrap items-center gap-2 justify-end">
+          <button
+            type="button"
+            disabled={!isDirty}
+            onClick={handleDiscard}
+            className="px-3 py-2 text-xs font-medium text-slate-600 border border-slate-200 rounded-lg bg-white hover:bg-slate-50 disabled:opacity-40 disabled:pointer-events-none transition"
+          >
+            {t('ws.sourceDiscard')}
+          </button>
+          <button
+            type="button"
+            disabled={!isDirty}
+            onClick={handleConfirmSync}
+            className="px-3 py-2 text-xs font-medium text-white bg-[#0052D9] rounded-lg hover:bg-blue-800 disabled:opacity-40 disabled:pointer-events-none transition shadow-sm"
+          >
+            {t('ws.sourceConfirm')}
+          </button>
         </div>
       </div>
     </div>

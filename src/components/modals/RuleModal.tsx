@@ -69,9 +69,6 @@ export function RuleModal({ type, existing, archivedTasks, category, onClose, on
         </div>
 
         <div className="p-6 space-y-5">
-          <p className="text-[12px] text-slate-600 bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 leading-relaxed">
-            {t('modal.ruleSaveUnder', { category })}
-          </p>
           {/* Rule prompt */}
           <div>
             <div className="flex justify-between items-end mb-1.5">
