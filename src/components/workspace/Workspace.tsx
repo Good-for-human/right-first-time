@@ -4,10 +4,9 @@ import { ChevronRight, Check, Archive, Loader2, CheckCircle, AlertTriangle, X, R
 import { Badge } from '@/components/ui';
 import { SourceDataPanel } from './SourceDataPanel';
 import { GenSettingsBar } from './GenSettingsBar';
-import { EvaluationReport } from './EvaluationReport';
 import { EditorSection } from './EditorSection';
 import { MediaAnalysisPanel } from './MediaAnalysisPanel';
-import { translateContent, translateSection, generateListing, evaluateListing, parseLLMError } from '@/services/llm';
+import { translateContent, translateSection, generateListing, parseLLMError } from '@/services/llm';
 import { useTaskStore } from '@/store/taskStore';
 import type {
   Task,
@@ -115,7 +114,6 @@ export function Workspace({
   });
   const [translateError, setTranslateError] = useState<string | null>(null);
   const [rewriteError, setRewriteError] = useState<string | null>(null);
-  const [evaluationLoading, setEvaluationLoading] = useState(false);
 
   // Sync fetched product data into the editor when switching tasks (layout phase avoids stale persist races)
   useLayoutEffect(() => {
@@ -226,26 +224,6 @@ export function Workspace({
     };
   };
 
-  const handleEvaluate = async () => {
-    if (!appSettings.apiKey) {
-      setRewriteError('请先在「系统设置 → 大模型配置」中填写 API 密钥。');
-      return;
-    }
-    setEvaluationLoading(true);
-    try {
-      const report = await evaluateListing(
-        { title: edits.title, bullets: edits.bullets, description: edits.description, category: task.category },
-        appSettings.model,
-        appSettings.apiKey,
-      );
-      updateTask(task.id, { evaluation: report });
-    } catch (err) {
-      console.error('[evaluate]', err);
-      setRewriteError(parseLLMError(err));
-    } finally {
-      setEvaluationLoading(false);
-    }
-  };
 
   const handleSectionTranslate = async (key: ContentKey) => {
     if (!appSettings.apiKey) {
@@ -484,12 +462,6 @@ export function Workspace({
                   </button>
                 </div>
               )}
-
-              <EvaluationReport
-                report={task.evaluation ?? null}
-                isLoading={evaluationLoading}
-                onReEvaluate={handleEvaluate}
-              />
 
               {(['title', 'bullets', 'description'] as ContentKey[]).map((key) => (
                 <EditorSection
