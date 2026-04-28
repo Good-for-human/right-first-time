@@ -124,15 +124,17 @@ export default function App() {
           categories={categories}
           appSettings={appSettings}
           onClose={closeModal}
-          onCreate={(data) => {
+          onCreate={(data, activateAfter = true) => {
             const newTask: Task = {
               ...data,
-              id: Date.now().toString(),
+              id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
               createdAt: new Date().toISOString(),
             };
             addTask(newTask);
-            setActiveTaskId(newTask.id);
-            setView('workspace');
+            if (activateAfter) {
+              setActiveTaskId(newTask.id);
+              setView('workspace');
+            }
           }}
         />
       )}

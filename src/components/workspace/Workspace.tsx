@@ -210,7 +210,25 @@ export function Workspace({
         }
       : undefined;
 
-    return { section, personas: taskPersonas, instructionRules, negativeRules, benchmark };
+    return {
+      section,
+      personas: taskPersonas,
+      instructionRules,
+      negativeRules,
+      benchmark,
+      referenceAsins: (task.referenceAsins ?? []).filter(Boolean),
+    };
+  };
+
+  const handleReferenceAsinAdd = (asin: string) => {
+    const current = task.referenceAsins ?? [];
+    if (current.length >= 3 || current.includes(asin)) return;
+    updateTask(task.id, { referenceAsins: [...current, asin] });
+  };
+
+  const handleReferenceAsinRemove = (asin: string) => {
+    const current = task.referenceAsins ?? [];
+    updateTask(task.id, { referenceAsins: current.filter((a) => a !== asin) });
   };
 
   const handleApprove = () => {
@@ -397,6 +415,8 @@ export function Workspace({
             onGlobalRegenerate={handleGlobalRegenerate}
             onTranslationLangChange={(lang) => setAppSettings({ translationLang: lang })}
             onTranslate={handleTranslate}
+            onReferenceAsinAdd={handleReferenceAsinAdd}
+            onReferenceAsinRemove={handleReferenceAsinRemove}
           />
 
           <div className="flex-1 overflow-y-auto p-6">

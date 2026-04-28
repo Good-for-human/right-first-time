@@ -396,6 +396,11 @@ export interface GenerateListingOptions {
   negativeRules?: GenerateNegativeRule[];
   /** Reference benchmark listing — AI follows its style and structure */
   benchmark?: { title: string; bullets: string; description: string };
+  /**
+   * Task-level reference ASINs (up to 3). Highest priority hint to the model:
+   * emulate the style, length, and structure of these top-performing listings.
+   */
+  referenceAsins?: string[];
 }
 
 /**
@@ -408,10 +413,10 @@ export async function generateListing(
   model: LLMModel,
   apiKey: string,
 ): Promise<{ title: string; bullets: string; description: string }> {
-  const { section = 'all', personas = [], instructionRules = [], negativeRules = [], benchmark } = options;
+  const { section = 'all', personas = [], instructionRules = [], negativeRules = [], benchmark, referenceAsins = [] } = options;
   const langName = LANGUAGE_NAMES[input.language] ?? input.language;
 
-  // ── Build rules block from saved 通用 + category rules (real ids/categories) ──
+  // ── Build rules block (3-tier priority) ──────────────────────
   const sectionFilter = (t: string) => section === 'all' || t === 'all' || t === section;
   const GLOBAL_CAT = '通用';
 
@@ -420,8 +425,8 @@ export async function generateListing(
 
   const gInstr = instrFiltered.filter((r) => r.category === GLOBAL_CAT);
   const cInstr = instrFiltered.filter((r) => r.category === input.category && r.category !== GLOBAL_CAT);
-  const gNeg = negFiltered.filter((r) => r.category === GLOBAL_CAT);
-  const cNeg = negFiltered.filter((r) => r.category === input.category && r.category !== GLOBAL_CAT);
+  const gNeg   = negFiltered.filter((r) => r.category === GLOBAL_CAT);
+  const cNeg   = negFiltered.filter((r) => r.category === input.category && r.category !== GLOBAL_CAT);
 
   const isReq = (p?: string) => p === 'Required';
   const fmtInstrList = (list: GenerateInstructionRule[], bucket: 'req' | 'sug') => {
@@ -437,29 +442,44 @@ export async function generateListing(
       : '    (none)';
   };
 
+  /**
+   * Priority order (user-defined):
+   * Tier 1 (MUST): referenceAsins = category Required = negative Critical
+   * Tier 2 (HIGH): global Required = category Suggested = negative High
+   * Tier 3 (GUIDANCE): global Suggested
+   */
   const rulesBlock = [
-    '── SAVED INSTRUCTION RULES (must follow — from user workspace / Firestore) ──',
-    `GLOBAL (${GLOBAL_CAT}) — Required:`,
-    fmtInstrList(gInstr, 'req'),
-    `GLOBAL (${GLOBAL_CAT}) — Suggested:`,
-    fmtInstrList(gInstr, 'sug'),
-    '',
-    `CATEGORY (${input.category}) — Required:`,
+    '════ TIER 1 — HIGHEST PRIORITY (MUST enforce) ════',
+    // 1a. Reference ASINs
+    referenceAsins.length
+      ? [
+          'REFERENCE ASINs (top-performing listings — emulate their style, length & structure):',
+          referenceAsins.map((a) => `    • ${a}`).join('\n'),
+        ].join('\n')
+      : null,
+    // 1b. Category Required instruction rules
+    `CATEGORY (${input.category}) — Required instruction rules:`,
     fmtInstrList(cInstr, 'req'),
-    `CATEGORY (${input.category}) — Suggested:`,
+    // 1c. Negative Critical (both global + category)
+    `NEGATIVE / PROHIBITED — Critical severity (${GLOBAL_CAT} + ${input.category}):`,
+    fmtNegList([...gNeg, ...cNeg], 'Critical'),
+    '',
+    '════ TIER 2 — HIGH PRIORITY (should follow) ════',
+    // 2a. Global Required
+    `GLOBAL (${GLOBAL_CAT}) — Required instruction rules:`,
+    fmtInstrList(gInstr, 'req'),
+    // 2b. Category Suggested
+    `CATEGORY (${input.category}) — Suggested instruction rules:`,
     fmtInstrList(cInstr, 'sug'),
+    // 2c. Negative High (both global + category)
+    `NEGATIVE / PROHIBITED — High severity (${GLOBAL_CAT} + ${input.category}):`,
+    fmtNegList([...gNeg, ...cNeg], 'other'),
     '',
-    '── SAVED NEGATIVE / PROHIBITED RULES (do not violate) ──',
-    `GLOBAL (${GLOBAL_CAT}) — Critical:`,
-    fmtNegList(gNeg, 'Critical'),
-    `GLOBAL (${GLOBAL_CAT}) — High / other:`,
-    fmtNegList(gNeg, 'other'),
-    '',
-    `CATEGORY (${input.category}) — Critical:`,
-    fmtNegList(cNeg, 'Critical'),
-    `CATEGORY (${input.category}) — High / other:`,
-    fmtNegList(cNeg, 'other'),
-  ].join('\n');
+    '════ TIER 3 — GUIDANCE (best effort) ════',
+    // 3a. Global Suggested
+    `GLOBAL (${GLOBAL_CAT}) — Suggested instruction rules:`,
+    fmtInstrList(gInstr, 'sug'),
+  ].filter((l) => l !== null).join('\n');
 
   // ── Personas block ────────────────────────────────────────
   const personasBlock = personas.length

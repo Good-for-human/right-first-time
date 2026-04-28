@@ -59,6 +59,9 @@ export interface Task {
 
   // ── Benchmark flag — used as style reference for AI rewrite ──
   isBenchmark?: boolean;
+
+  // ── Reference ASINs — task-level style benchmarks (max 3), highest LLM priority ──
+  referenceAsins?: string[];
 }
 
 // ============================================================
