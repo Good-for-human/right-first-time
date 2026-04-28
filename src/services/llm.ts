@@ -267,9 +267,10 @@ export async function translateContent(
   const systemPrompt =
     `You are a professional Amazon product listing translator. ` +
     `Translate from ${fromName} to ${toName}. ` +
-    `Preserve all bullet formatting, line breaks, and technical values exactly. ` +
+    `IMPORTANT: Preserve ALL formatting exactly — HTML tags (e.g. <h3>, <p>), bullet point line breaks, paragraph blank lines, and technical values must remain unchanged. ` +
+    `Translate only the visible text inside tags; never alter or remove any HTML markup. ` +
     `You MUST output ONLY a raw JSON object (no markdown fences, no explanation) with exactly these three keys:\n` +
-    `{\n  "title": "<translated title>",\n  "bullets": "<translated bullets, newline-separated>",\n  "description": "<translated description>"\n}`;
+    `{\n  "title": "<translated title>",\n  "bullets": "<translated bullets, newline-separated>",\n  "description": "<translated description — preserve HTML structure>"\n}`;
 
   const userPrompt =
     `Translate each field below:\n\n` +
@@ -317,7 +318,8 @@ export async function translateSection(
   const systemPrompt =
     `You are a professional Amazon product listing translator. ` +
     `Translate the ${sectionLabel} from ${fromName} to ${toName}. ` +
-    `Preserve all formatting, line breaks, and technical values exactly. ` +
+    `IMPORTANT: Preserve ALL formatting exactly — HTML tags (e.g. <h3>, <p>), line breaks, paragraph blank lines, and technical values must remain unchanged. ` +
+    `Translate only the visible text inside HTML tags; never alter or remove any HTML markup. ` +
     `Output ONLY the translated text with no explanation, no labels, and no extra commentary.`;
   const raw = await callLLM(
     [
@@ -688,19 +690,32 @@ export async function generateListing(
 function extractJSON<T>(raw: string): T | null {
   let text = raw.trim();
 
-  // 1. Try stripping markdown fences (multiline-safe)
+  // 1. Strip markdown fences (multiline-safe)
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
   if (fenced) text = fenced[1].trim();
 
-  // 2. Try to find the outermost {...} block if still not clean JSON
+  // 2. Find outermost {...} block if not starting with {
   if (!text.startsWith('{')) {
     const braceMatch = text.match(/\{[\s\S]*\}/);
     if (braceMatch) text = braceMatch[0];
   }
 
+  // 3. First attempt: standard JSON.parse
   try {
     return JSON.parse(text) as T;
   } catch {
-    return null;
+    // 4. Fallback: remove trailing commas before } or ] (common model mistake)
+    const cleaned = text
+      .replace(/,\s*([}\]])/g, '$1')
+      // Remove single-line comments
+      .replace(/\/\/[^\n]*/g, '')
+      // Replace smart/curly quotes with straight quotes
+      .replace(/[\u201C\u201D]/g, '"')
+      .replace(/[\u2018\u2019]/g, "'");
+    try {
+      return JSON.parse(cleaned) as T;
+    } catch {
+      return null;
+    }
   }
 }

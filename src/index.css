@@ -34,6 +34,45 @@
   }
 }
 
+/* Rendered HTML content (Amazon listing descriptions with h3/p tags) */
+.rendered-html h1, .rendered-html h2 {
+  @apply font-bold text-slate-800 text-base mt-3 mb-1;
+}
+
+.rendered-html h3, .rendered-html h4 {
+  @apply font-semibold text-slate-800 text-sm mt-2.5 mb-1;
+}
+
+.rendered-html p {
+  @apply text-slate-700 leading-relaxed mb-2;
+}
+
+.rendered-html ul {
+  @apply list-disc list-inside space-y-1 mb-2;
+}
+
+.rendered-html ol {
+  @apply list-decimal list-inside space-y-1 mb-2;
+}
+
+.rendered-html li {
+  @apply text-slate-700 leading-relaxed;
+}
+
+.rendered-html strong, .rendered-html b {
+  @apply font-semibold;
+}
+
+.rendered-html em, .rendered-html i {
+  @apply italic;
+}
+
+.rendered-html br {
+  display: block;
+  content: '';
+  margin-bottom: 0.25rem;
+}
+
 @layer utilities {
   .animate-in {
     animation: animateIn 0.2s ease-out;

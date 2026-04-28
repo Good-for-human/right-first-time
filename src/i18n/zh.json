@@ -44,7 +44,9 @@
     "evaluating": "AI 评分中…",
     "noEvaluation": "尚未生成评估报告",
     "evaluateNow": "立即评估",
-    "translateSection": "翻译此板块"
+    "translateSection": "翻译此板块",
+    "previewMode": "预览",
+    "editMode": "编辑"
   },
   "score": {
     "clarity": "可读性",

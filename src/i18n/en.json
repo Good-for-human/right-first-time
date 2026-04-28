@@ -44,7 +44,9 @@
     "evaluating": "AI evaluating…",
     "noEvaluation": "No evaluation yet",
     "evaluateNow": "Evaluate now",
-    "translateSection": "Translate this section"
+    "translateSection": "Translate this section",
+    "previewMode": "Preview",
+    "editMode": "Edit"
   },
   "score": {
     "clarity": "Clarity",

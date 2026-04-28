@@ -1,10 +1,15 @@
 import { useTranslation } from 'react-i18next';
-import { useRef, useEffect, useMemo } from 'react';
+import { useRef, useEffect, useMemo, useState } from 'react';
 import { diffCurrentAgainstBaseline } from '@/lib/textDiff';
-import { Check, AlertTriangle, RefreshCw, Globe, Languages, Info, Loader2, Wand2 } from 'lucide-react';
+import { Check, AlertTriangle, RefreshCw, Globe, Languages, Info, Loader2, Wand2, Eye, Pencil } from 'lucide-react';
 import { Badge } from '@/components/ui';
 import type { ContentKey, SectionMetadata, TranslationMap, LanguageCode } from '@/types';
 import { LANGUAGES } from '@/constants';
+
+/** Returns true if the string contains any HTML element tags. */
+function isHtmlContent(text: string): boolean {
+  return /<[a-zA-Z][^>]*>/.test(text);
+}
 
 interface EditorSectionProps {
   title: string;
@@ -51,14 +56,18 @@ export function EditorSection({
 }: EditorSectionProps) {
   const { t } = useTranslation();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [previewMode, setPreviewMode] = useState(false);
+
+  const hasHtml = isHtmlContent(value);
 
   // Auto-grow textarea to fit content, capped at 360px
   useEffect(() => {
+    if (previewMode) return;
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = 'auto';
     el.style.height = `${Math.min(el.scrollHeight, 360)}px`;
-  }, [value]);
+  }, [value, previewMode]);
 
   const targetLangObj = LANGUAGES.find((l) => l.code === targetLanguage);
   const targetLangLabel = systemLanguage === 'zh' ? targetLangObj?.zhLabel : targetLangObj?.label;
@@ -114,7 +123,27 @@ export function EditorSection({
             <span className="text-[11px] font-semibold text-[#0052D9] flex items-center gap-1.5 tracking-wider">
               <Globe size={12} /> {targetLangLabel}
             </span>
+            {hasHtml && (
+              <button
+                onClick={() => setPreviewMode((p) => !p)}
+                className="flex items-center gap-1 px-2 py-1 text-[10px] font-semibold text-slate-500 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded transition"
+              >
+                {previewMode ? <><Pencil size={10} /> {t('ws.editMode')}</> : <><Eye size={10} /> {t('ws.previewMode')}</>}
+              </button>
+            )}
           </div>
+          {previewMode ? (
+            <div
+              className={`rendered-html w-full text-sm p-3 border rounded-lg min-h-[80px] max-h-[360px] overflow-y-auto leading-relaxed transition-all ${
+                isRegenerating ? 'opacity-40' : 'opacity-100'
+              } ${
+                isModified
+                  ? 'border-2 border-emerald-400 bg-emerald-50/30'
+                  : 'border border-slate-200 bg-slate-50/30'
+              }`}
+              dangerouslySetInnerHTML={{ __html: value }}
+            />
+          ) : (
           <div className="relative">
             <textarea
               ref={textareaRef}
@@ -130,6 +159,7 @@ export function EditorSection({
               disabled={isArchived || isRegenerating}
             />
           </div>
+          )}
           {showBaselineDiff && (
             <div className="mt-2 rounded-lg border border-slate-200 bg-white p-2.5">
               <div className="flex items-center gap-2 mb-1.5">
@@ -214,10 +244,17 @@ export function EditorSection({
             )}
           </div>
           {translationContent ? (
-            <div className="w-full text-sm p-3 border border-slate-100 rounded-lg bg-white text-slate-600 min-h-[100px] leading-relaxed shadow-sm break-words whitespace-pre-wrap">
-              {translationContent}
-            </div>
-          ) : translationLoading ? (
+            isHtmlContent(translationContent) ? (
+              <div
+                className="rendered-html w-full text-sm p-3 border border-slate-100 rounded-lg bg-white text-slate-600 min-h-[100px] leading-relaxed shadow-sm break-words"
+                dangerouslySetInnerHTML={{ __html: translationContent }}
+              />
+            ) : (
+              <div className="w-full text-sm p-3 border border-slate-100 rounded-lg bg-white text-slate-600 min-h-[100px] leading-relaxed shadow-sm break-words whitespace-pre-wrap">
+                {translationContent}
+              </div>
+            )
+          ) : (sectionTranslateLoading || translationLoading) ? (
             <div className="flex flex-col items-center justify-center min-h-[100px] border border-dashed border-indigo-200 rounded-lg bg-indigo-50/30 text-indigo-400 gap-2">
               <Loader2 size={18} className="animate-spin" />
               <p className="text-xs">翻译中...</p>
