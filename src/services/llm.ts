@@ -299,6 +299,36 @@ export async function translateContent(
   };
 }
 
+/**
+ * Translate a single listing section (title / bullets / description).
+ * Returns the translated text as a plain string.
+ */
+export async function translateSection(
+  key: ContentKey,
+  text: string,
+  fromLang: string,
+  toLang: string,
+  model: LLMModel,
+  apiKey: string,
+): Promise<string> {
+  const fromName = LANGUAGE_NAMES[fromLang] ?? fromLang;
+  const toName   = LANGUAGE_NAMES[toLang]   ?? toLang;
+  const sectionLabel = key === 'title' ? 'title' : key === 'bullets' ? 'bullet points' : 'description';
+  const systemPrompt =
+    `You are a professional Amazon product listing translator. ` +
+    `Translate the ${sectionLabel} from ${fromName} to ${toName}. ` +
+    `Preserve all formatting, line breaks, and technical values exactly. ` +
+    `Output ONLY the translated text with no explanation, no labels, and no extra commentary.`;
+  const raw = await callLLM(
+    [
+      { role: 'system', content: systemPrompt },
+      { role: 'user',   content: text },
+    ],
+    model, apiKey, { temperature: 0.1, maxTokens: 2048 },
+  );
+  return raw.content.trim();
+}
+
 // ── Image analysis helper ─────────────────────────────────────
 
 export async function analyzeProductImages(
@@ -359,6 +389,83 @@ export async function analyzeProductImages(
   return json.candidates?.[0]?.content?.parts?.[0]?.text ?? '图片分析返回内容为空。';
 }
 
+// ── COSMO Evaluation ─────────────────────────────────────────
+
+export interface EvaluateListingInput {
+  title:       string;
+  bullets:     string;
+  description: string;
+  category:    string;
+}
+
+/**
+ * Lightweight djb2-style hash — enough to detect substantial content changes.
+ * Exported so the Workspace can compare without importing the full llm module conditionally.
+ */
+export function hashListingContent(title: string, bullets: string, description: string): string {
+  const combined = `${title}|||${bullets}|||${description}`;
+  let h = 5381;
+  for (let i = 0; i < combined.length; i++) {
+    h = ((h << 5) + h) ^ combined.charCodeAt(i);
+    h = h >>> 0; // keep unsigned 32-bit
+  }
+  return String(h);
+}
+
+/**
+ * Ask the model to evaluate the listing across four COSMO dimensions (0-100).
+ * Returns an EvaluationReport ready to persist on the Task.
+ */
+export async function evaluateListing(
+  input: EvaluateListingInput,
+  model: LLMModel,
+  apiKey: string,
+): Promise<import('@/types').EvaluationReport> {
+  const systemPrompt =
+    `You are an Amazon product listing quality analyst using the COSMO framework.\n` +
+    `Score each dimension 0-100 and output ONLY a raw JSON object (no markdown, no explanation):\n` +
+    `{\n  "scores": {"clarity":<0-100>,"completeness":<0-100>,"searchability":<0-100>,"compliance":<0-100>},\n` +
+    `  "issues": [{"type":"Warning"|"Error","text":"<brief description>"}],\n` +
+    `  "riskLevel": "Low"|"Medium"|"High"\n}\n\n` +
+    `Scoring guide:\n` +
+    `• clarity (0-100): clear, concise, customer-friendly language\n` +
+    `• completeness (0-100): key features, specs, and benefits fully covered\n` +
+    `• searchability (0-100): relevant keywords naturally integrated for Amazon SEO\n` +
+    `• compliance (0-100): no prohibited terms, policy violations, or unverifiable superlatives\n\n` +
+    `Set riskLevel to "High" if compliance < 70 or any "Error" exists; "Medium" if compliance < 85 or any "Warning"; otherwise "Low".`;
+
+  const userPrompt =
+    `Evaluate this Amazon product listing (category: ${input.category}):\n\n` +
+    `TITLE:\n${input.title}\n\nBULLETS:\n${input.bullets}\n\nDESCRIPTION:\n${input.description}`;
+
+  const raw = await callLLM(
+    [
+      { role: 'system', content: systemPrompt },
+      { role: 'user',   content: userPrompt },
+    ],
+    model, apiKey, { temperature: 0.1, maxTokens: 1024 },
+  );
+
+  const parsed = extractJSON<{
+    scores: { clarity: number; completeness: number; searchability: number; compliance: number };
+    issues: { type: 'Warning' | 'Error'; text: string }[];
+    riskLevel: 'Low' | 'Medium' | 'High';
+  }>(raw.content);
+
+  if (!parsed) throw new Error('evaluateListing: JSON parse failed');
+
+  return {
+    scores: {
+      clarity:       Math.min(100, Math.max(0, Math.round(parsed.scores?.clarity       ?? 75))),
+      completeness:  Math.min(100, Math.max(0, Math.round(parsed.scores?.completeness  ?? 75))),
+      searchability: Math.min(100, Math.max(0, Math.round(parsed.scores?.searchability ?? 75))),
+      compliance:    Math.min(100, Math.max(0, Math.round(parsed.scores?.compliance    ?? 75))),
+    },
+    issues:    Array.isArray(parsed.issues) ? parsed.issues : [],
+    riskLevel: parsed.riskLevel ?? 'Low',
+  };
+}
+
 // ── Listing generation (AI rewrite) ──────────────────────────
 
 export interface GenerateListingInput {
@@ -401,6 +508,11 @@ export interface GenerateListingOptions {
    * emulate the style, length, and structure of these top-performing listings.
    */
   referenceAsins?: string[];
+  /**
+   * Category keyword requirements. Primary keyword must appear prominently (title + first bullet).
+   * Secondary keywords included naturally where content allows — exact match required, no synonyms.
+   */
+  keywords?: { primary: string; secondary: string[] };
 }
 
 /**
@@ -413,7 +525,7 @@ export async function generateListing(
   model: LLMModel,
   apiKey: string,
 ): Promise<{ title: string; bullets: string; description: string }> {
-  const { section = 'all', personas = [], instructionRules = [], negativeRules = [], benchmark, referenceAsins = [] } = options;
+  const { section = 'all', personas = [], instructionRules = [], negativeRules = [], benchmark, referenceAsins = [], keywords } = options;
   const langName = LANGUAGE_NAMES[input.language] ?? input.language;
 
   // ── Build rules block (3-tier priority) ──────────────────────
@@ -481,6 +593,19 @@ export async function generateListing(
     fmtInstrList(gInstr, 'sug'),
   ].filter((l) => l !== null).join('\n');
 
+  // ── Keywords block (EXACT MATCH) ─────────────────────────
+  const keywordsBlock = keywords && (keywords.primary || keywords.secondary.length > 0)
+    ? [
+        '════ KEYWORDS — EXACT MATCH REQUIRED (no synonyms, no paraphrases) ════',
+        keywords.primary
+          ? `PRIMARY KEYWORD (must appear in title and first bullet):\n    • ${keywords.primary}`
+          : null,
+        keywords.secondary.length > 0
+          ? `SECONDARY KEYWORDS (include naturally throughout, best-effort, do not force if unnatural):\n${keywords.secondary.map((k) => `    • ${k}`).join('\n')}`
+          : null,
+      ].filter((l) => l !== null).join('\n')
+    : '';
+
   // ── Personas block ────────────────────────────────────────
   const personasBlock = personas.length
     ? personas.map((p, i) => `  ${i + 1}. ${p.name}: ${p.description}`).join('\n')
@@ -516,6 +641,8 @@ export async function generateListing(
     'The instruction / negative blocks above are the exact active rules configured in the system for this task category.',
     '',
     rulesBlock,
+    keywordsBlock ? '' : null,
+    keywordsBlock || null,
     '',
     '── TARGET AUDIENCE PERSONAS ──',
     personasBlock,

@@ -25,14 +25,16 @@ import {
   subscribeRules,
   subscribePersonas,
   subscribeTasks,
+  subscribeKeywords,
 } from '@/services/firestoreService';
 import { INITIAL_SETTINGS } from '@/data/defaults';
 import { useAuthStore }     from '@/store/authStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { useRulesStore }    from '@/store/rulesStore';
 import { useTaskStore }     from '@/store/taskStore';
+import { useKeywordsStore } from '@/store/keywordsStore';
 
-const TOTAL_SUBSCRIPTIONS = 5;
+const TOTAL_SUBSCRIPTIONS = 6;
 
 export function useFirestoreSync() {
   const setUser        = useAuthStore((s) => s.setUser);
@@ -44,6 +46,7 @@ export function useFirestoreSync() {
   const setPersonas    = useRulesStore((s) => s.setPersonas);
   const setTasks       = useTaskStore((s) => s.setTasks);
   const setLoading     = useTaskStore((s) => s.setLoading);
+  const setKeywords    = useKeywordsStore((s) => s.setKeywords);
 
   useEffect(() => {
     let fsUnsubs: Array<() => void> = [];
@@ -75,6 +78,7 @@ export function useFirestoreSync() {
         subscribeRules((r)      => { setRules(r);        markFired('rules');      }),
         subscribePersonas((p)   => { setPersonas(p);     markFired('personas');   }),
         subscribeTasks((t)      => { setTasks(t);        markFired('tasks');      }),
+        subscribeKeywords((m)   => { setKeywords(m);     markFired('keywords');   }),
       ];
     };
 
@@ -85,6 +89,7 @@ export function useFirestoreSync() {
       setRules([]);
       setPersonas([]);
       setTasks([]);
+      setKeywords({});
       setLoading(false);
     };
 

@@ -24,7 +24,7 @@ import {
   type Unsubscribe,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import type { AppSettings, Rule, Persona, Task } from '@/types';
+import type { AppSettings, Rule, Persona, Task, KeywordMap } from '@/types';
 import {
   INITIAL_SETTINGS,
   INITIAL_CATEGORIES,
@@ -49,6 +49,7 @@ function requireUid(): string {
 
 const settingsDoc = () => doc(db, 'users', requireUid(), 'config', 'settings');
 const catDoc      = () => doc(db, 'users', requireUid(), 'config', 'categories');
+const kwDoc       = () => doc(db, 'users', requireUid(), 'config', 'keywords');
 const ruleCol     = () => collection(db, 'users', requireUid(), 'rules');
 const perCol      = () => collection(db, 'users', requireUid(), 'personas');
 const taskCol     = () => collection(db, 'users', requireUid(), 'tasks');
@@ -111,6 +112,12 @@ export function subscribeCategories(cb: (list: string[]) => void): Unsubscribe {
   });
 }
 
+export function subscribeKeywords(cb: (map: KeywordMap) => void): Unsubscribe {
+  return onSnapshot(kwDoc(), (snap) => {
+    cb(snap.exists() ? ((snap.data().map as KeywordMap) ?? {}) : {});
+  });
+}
+
 export function subscribeRules(cb: (rules: Rule[]) => void): Unsubscribe {
   return onSnapshot(ruleCol(), (snap) => {
     cb(snap.docs.map((d) => d.data() as Rule));
@@ -157,6 +164,11 @@ export async function fsUpdateSettings(settings: AppSettings): Promise<void> {
 // ── Category mutations ────────────────────────────────────────
 export function fsUpdateCategories(list: string[]): void {
   setDoc(catDoc(), { list }).catch(console.error);
+}
+
+// ── Keyword mutations ─────────────────────────────────────────
+export function fsSetKeywords(map: KeywordMap): void {
+  setDoc(kwDoc(), { map: stripUndefined(map) }).catch(console.error);
 }
 
 // ── Rule mutations ────────────────────────────────────────────

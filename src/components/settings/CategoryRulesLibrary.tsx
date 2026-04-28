@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FileText, Plus, Edit3, Trash2, ShieldAlert, List, Archive, X } from 'lucide-react';
+import { FileText, Plus, Edit3, Trash2, ShieldAlert, List, Archive, X, KeyRound, Tag } from 'lucide-react';
 import { Badge } from '@/components/ui';
-import type { Rule, Task } from '@/types';
+import type { Rule, Task, KeywordSet } from '@/types';
 
 interface CategoryRulesLibraryProps {
   categories: string[];
@@ -14,6 +14,10 @@ interface CategoryRulesLibraryProps {
   onAddRule: (type: Rule['type'], category: string) => void;
   onEditRule: (rule: Rule) => void;
   onDeleteRule: (rule: Rule) => void;
+  /** Current keyword map (all categories) */
+  keywords?: Record<string, KeywordSet>;
+  /** Persist updated keyword set for a category */
+  onSetKeywords?: (category: string, set: KeywordSet) => void;
 }
 
 export function CategoryRulesLibrary({
@@ -24,9 +28,48 @@ export function CategoryRulesLibrary({
   onAddRule,
   onEditRule,
   onDeleteRule,
+  keywords = {},
+  onSetKeywords,
 }: CategoryRulesLibraryProps) {
   const { t } = useTranslation();
   const [activeCategory, setActiveCategory] = useState(categories[0] ?? '通用');
+
+  // keyword library local state
+  const kwSet = keywords[activeCategory] ?? { primary: '', secondary: [] };
+  const [kwPrimary, setKwPrimary] = useState('');
+  const [kwSecInput, setKwSecInput] = useState('');
+
+  const handleActiveCategoryChange = (cat: string) => {
+    setActiveCategory(cat);
+    setKwPrimary('');
+    setKwSecInput('');
+  };
+
+  const saveKeywords = (updated: KeywordSet) => {
+    onSetKeywords?.(activeCategory, updated);
+  };
+
+  const handlePrimaryBlur = () => {
+    const trimmed = kwPrimary.trim();
+    if (trimmed !== kwSet.primary) {
+      saveKeywords({ ...kwSet, primary: trimmed });
+    }
+  };
+
+  const handleAddSecondary = () => {
+    const trimmed = kwSecInput.trim();
+    if (!trimmed || kwSet.secondary.includes(trimmed)) { setKwSecInput(''); return; }
+    const updated = { ...kwSet, secondary: [...kwSet.secondary, trimmed] };
+    saveKeywords(updated);
+    setKwSecInput('');
+  };
+
+  const handleRemoveSecondary = (kw: string) => {
+    saveKeywords({ ...kwSet, secondary: kwSet.secondary.filter((k) => k !== kw) });
+  };
+
+  // sync local primary input when active category changes
+  // (we do this via key on the input so it re-mounts)
 
   const filteredRules = rules.filter((r) => r.category === activeCategory);
   const instructionRules = filteredRules.filter((r) => r.type === 'instruction');
@@ -56,7 +99,7 @@ export function CategoryRulesLibrary({
           {categories.map((cat) => (
             <div key={cat} className="relative group flex items-center">
               <button
-                onClick={() => setActiveCategory(cat)}
+                onClick={() => handleActiveCategoryChange(cat)}
                 className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex items-center gap-2 ${
                   activeCategory === cat
                     ? 'border-[#0052D9] text-[#0052D9]'
@@ -141,6 +184,77 @@ export function CategoryRulesLibrary({
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+
+          {/* Keyword library */}
+          <div>
+            <div className="flex items-end mb-4">
+              <h4 className="text-[14px] font-bold text-slate-800 flex items-center gap-2 uppercase tracking-wide">
+                <KeyRound size={16} className="text-violet-500" /> {t('set.keywordLib')}
+              </h4>
+            </div>
+            <div className="border border-violet-100 rounded-xl bg-violet-50/30 p-4 space-y-4">
+              <p className="text-xs text-slate-500 leading-relaxed">{t('set.keywordLibDesc')}</p>
+
+              {/* Primary keyword */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5 flex items-center gap-1.5">
+                  <Tag size={12} className="text-violet-500" /> {t('set.kwPrimary')}
+                </label>
+                <input
+                  key={`primary-${activeCategory}`}
+                  type="text"
+                  defaultValue={kwSet.primary}
+                  onChange={(e) => setKwPrimary(e.target.value)}
+                  onBlur={handlePrimaryBlur}
+                  placeholder={t('set.kwPrimaryPlaceholder')}
+                  className="w-full text-sm px-3 py-2 border border-violet-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-400"
+                />
+              </div>
+
+              {/* Secondary keywords */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5 flex items-center gap-1.5">
+                  <Tag size={12} className="text-slate-400" /> {t('set.kwSecondary')}
+                </label>
+                <div className="flex gap-2 mb-2">
+                  <input
+                    type="text"
+                    value={kwSecInput}
+                    onChange={(e) => setKwSecInput(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); handleAddSecondary(); } }}
+                    placeholder={t('set.kwSecPlaceholder')}
+                    className="flex-1 text-sm px-3 py-2 border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-violet-200 focus:border-violet-300"
+                  />
+                  <button
+                    onClick={handleAddSecondary}
+                    className="px-3 py-2 bg-violet-600 text-white rounded-lg text-xs font-semibold hover:bg-violet-700 transition flex items-center gap-1"
+                  >
+                    <Plus size={12} /> {t('modal.add')}
+                  </button>
+                </div>
+                {kwSet.secondary.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {kwSet.secondary.map((kw) => (
+                      <span
+                        key={kw}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-white border border-violet-200 text-violet-700 text-xs rounded-full shadow-sm"
+                      >
+                        {kw}
+                        <button
+                          onClick={() => handleRemoveSecondary(kw)}
+                          className="text-violet-400 hover:text-red-500 transition ml-0.5"
+                        >
+                          <X size={10} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-400 py-2">{t('set.kwSecEmpty')}</p>
+                )}
+              </div>
             </div>
           </div>
 

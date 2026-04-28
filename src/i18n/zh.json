@@ -39,7 +39,12 @@
     "imageDownloadProgress": "正在下载 {{current}} / {{total}}",
     "imageDownloadInvalidAsin": "请输入有效 ASIN（字母与数字，至少 8 位）。",
     "imageDownloadFailed": "下载失败",
-    "imageDownloadProxyHint": "需在已部署的 Netlify 环境或本地运行 netlify dev 以启用图片代理。"
+    "imageDownloadProxyHint": "需在已部署的 Netlify 环境或本地运行 netlify dev 以启用图片代理。",
+    "reEvaluate": "重新评估",
+    "evaluating": "AI 评分中…",
+    "noEvaluation": "尚未生成评估报告",
+    "evaluateNow": "立即评估",
+    "translateSection": "翻译此板块"
   },
   "score": {
     "clarity": "可读性",
@@ -90,7 +95,14 @@
     "genRules": "生成规则",
     "negRules": "风控红线",
     "noGenRules": "暂无生成规则",
-    "noNegRules": "暂无风控红线"
+    "noNegRules": "暂无风控红线",
+    "keywordLib": "关键词库",
+    "keywordLibDesc": "此处设置的关键词将融入 AI 生成的各板块 listing。首推关键词须完整出现在标题和首个卖点中；次推关键词在不影响整体语言质量的前提下尽量自然覆盖。关键词须完全匹配，不可使用同义替换。",
+    "kwPrimary": "首推关键词（1 个）",
+    "kwPrimaryPlaceholder": "输入首推关键词，失焦后自动保存",
+    "kwSecondary": "次推关键词（多个）",
+    "kwSecPlaceholder": "输入关键词后按回车或逗号添加",
+    "kwSecEmpty": "暂无次推关键词"
   },
   "modal": {
     "createTask": "新建任务",

@@ -62,6 +62,11 @@ export interface Task {
 
   // ── Reference ASINs — task-level style benchmarks (max 3), highest LLM priority ──
   referenceAsins?: string[];
+
+  // ── AI evaluation (COSMO scoring) ─────────────────────────
+  evaluation?: EvaluationReport;
+  /** Simple hash of title+bullets+description at evaluation time; used to detect substantial changes. */
+  evaluationHash?: string;
 }
 
 // ============================================================
@@ -258,6 +263,19 @@ export interface LLMResponse {
     completion_tokens: number;
   };
 }
+
+// ============================================================
+// Keyword Library
+// ============================================================
+
+/** Per-category keyword set: 1 primary + multiple secondary keywords. */
+export interface KeywordSet {
+  primary: string;
+  secondary: string[];
+}
+
+/** Map of category name → keyword set. */
+export type KeywordMap = Record<string, KeywordSet>;
 
 // ============================================================
 // UI Helper Types

@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { useRef, useEffect, useMemo } from 'react';
 import { diffCurrentAgainstBaseline } from '@/lib/textDiff';
-import { Check, AlertTriangle, RefreshCw, Globe, Languages, Info, Loader2 } from 'lucide-react';
+import { Check, AlertTriangle, RefreshCw, Globe, Languages, Info, Loader2, Wand2 } from 'lucide-react';
 import { Badge } from '@/components/ui';
 import type { ContentKey, SectionMetadata, TranslationMap, LanguageCode } from '@/types';
 import { LANGUAGES } from '@/constants';
@@ -18,12 +18,16 @@ interface EditorSectionProps {
   isArchived: boolean;
   isRegenerating: boolean;
   translationLoading?: boolean;
+  /** true when this section's translation is being generated */
+  sectionTranslateLoading?: boolean;
   /** true when the current value differs from the original fetched content */
   isModified?: boolean;
   /** Scraped / saved baseline (task snapshot) — used for diff highlight vs `value` */
   baselineValue: string;
   onChange: (value: string) => void;
   onRegenerate: (key: ContentKey) => void;
+  /** Trigger translation for this section only */
+  onTranslate?: () => void;
 }
 
 export function EditorSection({
@@ -38,10 +42,12 @@ export function EditorSection({
   isArchived,
   isRegenerating,
   translationLoading = false,
+  sectionTranslateLoading = false,
   isModified = false,
   baselineValue,
   onChange,
   onRegenerate,
+  onTranslate,
 }: EditorSectionProps) {
   const { t } = useTranslation();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -193,6 +199,19 @@ export function EditorSection({
             <span className="text-[11px] font-semibold text-slate-500 flex items-center gap-1.5 tracking-wider">
               <Languages size={12} /> {translationLangLabel}
             </span>
+            {onTranslate && !isArchived && (
+              <button
+                onClick={onTranslate}
+                disabled={sectionTranslateLoading || translationLoading}
+                className="flex items-center gap-1 px-2 py-1 text-[10px] font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 rounded transition disabled:opacity-50"
+              >
+                {sectionTranslateLoading
+                  ? <Loader2 size={10} className="animate-spin" />
+                  : <Wand2 size={10} />
+                }
+                {t('ws.translateSection')}
+              </button>
+            )}
           </div>
           {translationContent ? (
             <div className="w-full text-sm p-3 border border-slate-100 rounded-lg bg-white text-slate-600 min-h-[100px] leading-relaxed shadow-sm break-words whitespace-pre-wrap">

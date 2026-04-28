@@ -7,7 +7,7 @@ import { GenSettingsBar } from './GenSettingsBar';
 import { EvaluationReport } from './EvaluationReport';
 import { EditorSection } from './EditorSection';
 import { MediaAnalysisPanel } from './MediaAnalysisPanel';
-import { translateContent, generateListing, parseLLMError } from '@/services/llm';
+import { translateContent, translateSection, generateListing, evaluateListing, hashListingContent, parseLLMError } from '@/services/llm';
 import { useTaskStore } from '@/store/taskStore';
 import type {
   Task,
@@ -16,9 +16,9 @@ import type {
   AppSettings,
   GeneratedContent,
   SectionMetadata,
-  EvaluationReport as EvalReport,
   TranslationMap,
   ContentKey,
+  KeywordSet,
 } from '@/types';
 import { LANGUAGES } from '@/constants';
 
@@ -74,13 +74,6 @@ function buildEditorSectionMetadata(
   };
 }
 
-const MOCK_EVALUATION: EvalReport = {
-  scores: { clarity: 94, completeness: 90, searchability: 96, compliance: 82 },
-  issues: [{ type: 'Warning', text: "Description still contains slightly subjective term 'high-performance'." }],
-  riskLevel: 'Low',
-};
-
-
 interface WorkspaceProps {
   task: Task | undefined;
   updateTask: (id: string, updates: Partial<Task>) => void;
@@ -89,6 +82,8 @@ interface WorkspaceProps {
   appSettings: AppSettings;
   setAppSettings: (settings: Partial<AppSettings>) => void;
   rules?: import('@/types').Rule[];
+  /** Current keyword set for the task's category */
+  categoryKeywords?: KeywordSet;
 }
 
 export function Workspace({
@@ -99,6 +94,7 @@ export function Workspace({
   appSettings,
   setAppSettings,
   rules = [],
+  categoryKeywords,
 }: WorkspaceProps) {
   const { t } = useTranslation();
 
@@ -111,8 +107,12 @@ export function Workspace({
   const [edits, setEdits] = useState<GeneratedContent>({ title: '', bullets: '', description: '' });
   const [translationMap, setTranslationMap] = useState<TranslationMap>({});
   const [translationLoading, setTranslationLoading] = useState(false);
+  const [sectionTranslateLoading, setSectionTranslateLoading] = useState<Record<ContentKey, boolean>>({
+    title: false, bullets: false, description: false,
+  });
   const [translateError, setTranslateError] = useState<string | null>(null);
   const [rewriteError, setRewriteError] = useState<string | null>(null);
+  const [evaluationLoading, setEvaluationLoading] = useState(false);
 
   // Sync fetched product data into the editor when switching tasks (layout phase avoids stale persist races)
   useLayoutEffect(() => {
@@ -217,6 +217,9 @@ export function Workspace({
       negativeRules,
       benchmark,
       referenceAsins: (task.referenceAsins ?? []).filter(Boolean),
+      keywords: categoryKeywords && (categoryKeywords.primary || categoryKeywords.secondary.length > 0)
+        ? categoryKeywords
+        : undefined,
     };
   };
 
@@ -229,6 +232,54 @@ export function Workspace({
   const handleReferenceAsinRemove = (asin: string) => {
     const current = task.referenceAsins ?? [];
     updateTask(task.id, { referenceAsins: current.filter((a) => a !== asin) });
+  };
+
+  const handleEvaluate = async () => {
+    if (!appSettings.apiKey) {
+      setRewriteError('请先在「系统设置 → 大模型配置」中填写 API 密钥。');
+      return;
+    }
+    setEvaluationLoading(true);
+    try {
+      const report = await evaluateListing(
+        { title: edits.title, bullets: edits.bullets, description: edits.description, category: task.category },
+        appSettings.model,
+        appSettings.apiKey,
+      );
+      const hash = hashListingContent(edits.title, edits.bullets, edits.description);
+      updateTask(task.id, { evaluation: report, evaluationHash: hash });
+    } catch (err) {
+      console.error('[evaluate]', err);
+      setRewriteError(parseLLMError(err));
+    } finally {
+      setEvaluationLoading(false);
+    }
+  };
+
+  const handleSectionTranslate = async (key: ContentKey) => {
+    if (!appSettings.apiKey) {
+      setTranslateError('请先在「系统设置 → 大模型配置」中填写 API 密钥。');
+      return;
+    }
+    setSectionTranslateLoading((prev) => ({ ...prev, [key]: true }));
+    setTranslateError(null);
+    try {
+      const toLang = appSettings.translationLang;
+      const fromLang = task.language;
+      const translated = await translateSection(key, edits[key], fromLang, toLang, appSettings.model, appSettings.apiKey);
+      const prev = task.translations ?? {};
+      const newMap: TranslationMap = {
+        ...prev,
+        [key]: { ...(prev[key] ?? {}), [toLang]: translated },
+      };
+      setTranslationMap(newMap);
+      updateTask(task.id, { translations: newMap });
+    } catch (err) {
+      console.error('[sectionTranslate]', err);
+      setTranslateError(parseLLMError(err));
+    } finally {
+      setSectionTranslateLoading((prev) => ({ ...prev, [key]: false }));
+    }
   };
 
   const handleApprove = () => {
@@ -445,7 +496,11 @@ export function Workspace({
                 </div>
               )}
 
-              <EvaluationReport report={MOCK_EVALUATION} />
+              <EvaluationReport
+                report={task.evaluation ?? null}
+                isLoading={evaluationLoading}
+                onReEvaluate={handleEvaluate}
+              />
 
               {(['title', 'bullets', 'description'] as ContentKey[]).map((key) => (
                 <EditorSection
@@ -462,9 +517,11 @@ export function Workspace({
                   isArchived={isArchived}
                   isRegenerating={sectionLoading[key]}
                   translationLoading={translationLoading}
+                  sectionTranslateLoading={sectionTranslateLoading[key]}
                   isModified={isModifiedMap[key]}
                   onChange={(val) => setEdits((prev) => ({ ...prev, [key]: val }))}
                   onRegenerate={handleSectionRegenerate}
+                  onTranslate={() => handleSectionTranslate(key)}
                 />
               ))}
 

@@ -5,7 +5,7 @@ import { LLMConfig } from './LLMConfig';
 import { TinyfishConfig } from './TinyfishConfig';
 import { PersonaLibrary } from './PersonaLibrary';
 import { CategoryRulesLibrary } from './CategoryRulesLibrary';
-import type { AppSettings, Persona, Rule, Task } from '@/types';
+import type { AppSettings, Persona, Rule, Task, KeywordMap, KeywordSet } from '@/types';
 import { LANGUAGES } from '@/constants';
 
 interface SettingsAndRulesProps {
@@ -25,6 +25,8 @@ interface SettingsAndRulesProps {
   onAddPersona: () => void;
   onEditPersona: (persona: Persona) => void;
   onDeletePersona: (persona: Persona) => void;
+  keywords?: KeywordMap;
+  onSetKeywords?: (category: string, set: KeywordSet) => void;
 }
 
 export function SettingsAndRules({
@@ -43,6 +45,8 @@ export function SettingsAndRules({
   onAddPersona,
   onEditPersona,
   onDeletePersona,
+  keywords,
+  onSetKeywords,
 }: SettingsAndRulesProps) {
   const { t, i18n } = useTranslation();
   const [isSaving, setIsSaving] = useState(false);
@@ -133,6 +137,8 @@ export function SettingsAndRules({
             onAddRule={onAddRule}
             onEditRule={onEditRule}
             onDeleteRule={onDeleteRule}
+            keywords={keywords}
+            onSetKeywords={onSetKeywords}
           />
         </div>
       </div>

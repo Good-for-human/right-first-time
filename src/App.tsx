@@ -12,6 +12,7 @@ import { useTaskStore } from '@/store/taskStore';
 import { useRulesStore } from '@/store/rulesStore';
 import { useSettingsStore } from '@/store/settingsStore';
 import { useAuthStore } from '@/store/authStore';
+import { useKeywordsStore } from '@/store/keywordsStore';
 import { useFirestoreSync } from '@/lib/useFirestoreSync';
 import type { Persona, Rule, Task, ViewMode } from '@/types';
 
@@ -32,6 +33,7 @@ export default function App() {
   const { categories, rules, personas, addCategory, removeCategory, addRule, updateRule, removeRule, addPersona, updatePersona, removePersona } = useRulesStore();
   const { appSettings, setAppSettings, persistAppSettings } = useSettingsStore();
   const { user, authLoading } = useAuthStore();
+  const { keywords, setKeywordSet } = useKeywordsStore();
 
   // Bootstrap Auth listener + Firestore real-time sync
   useFirestoreSync();
@@ -95,6 +97,7 @@ export default function App() {
             appSettings={appSettings}
             setAppSettings={setAppSettings}
             rules={rules}
+            categoryKeywords={activeTask ? keywords[activeTask.category] : undefined}
           />
         ) : (
           <SettingsAndRules
@@ -113,6 +116,8 @@ export default function App() {
             onAddPersona={() => setModal({ type: 'addPersona' })}
             onEditPersona={(persona) => setModal({ type: 'editPersona', persona })}
             onDeletePersona={(persona) => setModal({ type: 'deletePersona', persona })}
+            keywords={keywords}
+            onSetKeywords={setKeywordSet}
           />
         )}
       </div>

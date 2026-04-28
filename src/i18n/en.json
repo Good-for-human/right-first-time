@@ -39,7 +39,12 @@
     "imageDownloadProgress": "Downloading {{current}} / {{total}}",
     "imageDownloadInvalidAsin": "Enter a valid ASIN (alphanumeric, at least 8 characters).",
     "imageDownloadFailed": "Download failed",
-    "imageDownloadProxyHint": "Image proxy runs on Netlify (or use netlify dev locally)."
+    "imageDownloadProxyHint": "Image proxy runs on Netlify (or use netlify dev locally).",
+    "reEvaluate": "Re-evaluate",
+    "evaluating": "AI evaluating…",
+    "noEvaluation": "No evaluation yet",
+    "evaluateNow": "Evaluate now",
+    "translateSection": "Translate this section"
   },
   "score": {
     "clarity": "Clarity",
@@ -90,7 +95,14 @@
     "genRules": "Generation Rules",
     "negRules": "Compliance Constraints",
     "noGenRules": "No Generation Rules",
-    "noNegRules": "No Constraints"
+    "noNegRules": "No Constraints",
+    "keywordLib": "Keyword Library",
+    "keywordLibDesc": "Keywords defined here are injected into every AI-generated listing section. The primary keyword must appear exactly in the title and first bullet. Secondary keywords are included naturally where content allows. Keywords are exact-match — no synonyms or paraphrases.",
+    "kwPrimary": "Primary keyword (1)",
+    "kwPrimaryPlaceholder": "Enter primary keyword, auto-saves on blur",
+    "kwSecondary": "Secondary keywords (multiple)",
+    "kwSecPlaceholder": "Type keyword then press Enter or comma",
+    "kwSecEmpty": "No secondary keywords yet"
   },
   "modal": {
     "createTask": "New Task",
