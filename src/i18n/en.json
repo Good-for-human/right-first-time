@@ -44,9 +44,11 @@
     "evaluating": "AI evaluating…",
     "noEvaluation": "No evaluation yet",
     "evaluateNow": "Evaluate now",
-    "translateSection": "Translate this section",
+    "translateSection": "Translate",
+    "globalTranslate": "Translate all",
     "previewMode": "Preview",
-    "editMode": "Edit"
+    "editMode": "Edit",
+    "evalNoIssues": "No compliance or quality issues found"
   },
   "score": {
     "clarity": "Clarity",
@@ -98,6 +100,8 @@
     "negRules": "Compliance Constraints",
     "noGenRules": "No Generation Rules",
     "noNegRules": "No Constraints",
+    "refAsin": "Reference ASINs",
+    "refAsinDesc": "Set up to 3 reference ASINs for this category (top-performing benchmark listings). The AI will use them as the highest-priority style reference during generation.",
     "keywordLib": "Keyword Library",
     "keywordLibDesc": "Keywords defined here are injected into every AI-generated listing section. The primary keyword must appear exactly in the title and first bullet. Secondary keywords are included naturally where content allows. Keywords are exact-match — no synonyms or paraphrases.",
     "kwPrimary": "Primary keyword (1)",

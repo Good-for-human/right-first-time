@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FileText, Plus, Edit3, Trash2, ShieldAlert, List, Archive, X, KeyRound, Tag } from 'lucide-react';
+import { FileText, Plus, Edit3, Trash2, ShieldAlert, List, Archive, X, KeyRound, Tag, Bookmark } from 'lucide-react';
 import { Badge } from '@/components/ui';
 import type { Rule, Task, KeywordSet } from '@/types';
 
@@ -18,6 +18,12 @@ interface CategoryRulesLibraryProps {
   keywords?: Record<string, KeywordSet>;
   /** Persist updated keyword set for a category */
   onSetKeywords?: (category: string, set: KeywordSet) => void;
+  /** Category-level reference ASINs map */
+  categoryRefAsins?: Record<string, string[]>;
+  /** Add a reference ASIN to a category (max 3) */
+  onAddCategoryRefAsin?: (category: string, asin: string) => void;
+  /** Remove a reference ASIN from a category */
+  onRemoveCategoryRefAsin?: (category: string, asin: string) => void;
 }
 
 export function CategoryRulesLibrary({
@@ -30,9 +36,24 @@ export function CategoryRulesLibrary({
   onDeleteRule,
   keywords = {},
   onSetKeywords,
+  categoryRefAsins = {},
+  onAddCategoryRefAsin,
+  onRemoveCategoryRefAsin,
 }: CategoryRulesLibraryProps) {
   const { t } = useTranslation();
   const [activeCategory, setActiveCategory] = useState(categories[0] ?? '通用');
+
+  // reference ASIN local state
+  const refAsinInputRef = useRef<HTMLInputElement>(null);
+  const activeRefAsins = categoryRefAsins[activeCategory] ?? [];
+
+  const handleAddRefAsin = () => {
+    const val = (refAsinInputRef.current?.value ?? '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (val && activeRefAsins.length < 3 && !activeRefAsins.includes(val)) {
+      onAddCategoryRefAsin?.(activeCategory, val);
+    }
+    if (refAsinInputRef.current) refAsinInputRef.current.value = '';
+  };
 
   // keyword library local state
   const kwSet = keywords[activeCategory] ?? { primary: '', secondary: [] };
@@ -184,6 +205,55 @@ export function CategoryRulesLibrary({
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+
+          {/* Reference ASINs (category-level, highest AI priority) */}
+          <div>
+            <div className="flex items-end mb-4">
+              <h4 className="text-[14px] font-bold text-slate-800 flex items-center gap-2 uppercase tracking-wide">
+                <Bookmark size={16} className="text-amber-500" /> {t('set.refAsin')}
+              </h4>
+            </div>
+            <div className="border border-amber-100 rounded-xl bg-amber-50/30 p-4 space-y-3">
+              <p className="text-xs text-slate-500 leading-relaxed">{t('set.refAsinDesc')}</p>
+              <div className="flex flex-wrap gap-2 items-center">
+                {activeRefAsins.map((asin) => (
+                  <span
+                    key={asin}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-white border border-amber-200 text-amber-900 text-xs font-mono rounded-full shadow-sm"
+                  >
+                    {asin}
+                    <button
+                      onClick={() => onRemoveCategoryRefAsin?.(activeCategory, asin)}
+                      className="text-amber-400 hover:text-red-500 transition ml-0.5"
+                    >
+                      <X size={10} />
+                    </button>
+                  </span>
+                ))}
+                {activeRefAsins.length < 3 && (
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      ref={refAsinInputRef}
+                      type="text"
+                      placeholder={t('ws.refAsinAdd')}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); handleAddRefAsin(); }
+                      }}
+                      className="border border-dashed border-amber-300 rounded-full px-2.5 py-1 bg-amber-50/50 text-amber-900 placeholder-amber-400 outline-none focus:border-amber-500 text-xs font-mono w-36"
+                      autoComplete="off"
+                    />
+                    <button
+                      onClick={handleAddRefAsin}
+                      className="p-1.5 bg-amber-100 hover:bg-amber-200 text-amber-700 rounded-full transition"
+                    >
+                      <Plus size={12} />
+                    </button>
+                  </div>
+                )}
+                <span className="text-[10px] text-amber-600 ml-auto">{activeRefAsins.length}/3</span>
+              </div>
             </div>
           </div>
 

@@ -7,7 +7,7 @@ import { GenSettingsBar } from './GenSettingsBar';
 import { EvaluationReport } from './EvaluationReport';
 import { EditorSection } from './EditorSection';
 import { MediaAnalysisPanel } from './MediaAnalysisPanel';
-import { translateContent, translateSection, generateListing, evaluateListing, hashListingContent, parseLLMError } from '@/services/llm';
+import { translateContent, translateSection, generateListing, evaluateListing, parseLLMError } from '@/services/llm';
 import { useTaskStore } from '@/store/taskStore';
 import type {
   Task,
@@ -84,6 +84,8 @@ interface WorkspaceProps {
   rules?: import('@/types').Rule[];
   /** Current keyword set for the task's category */
   categoryKeywords?: KeywordSet;
+  /** Category-level reference ASINs (up to 3), highest AI priority */
+  categoryRefAsins?: string[];
 }
 
 export function Workspace({
@@ -95,6 +97,7 @@ export function Workspace({
   setAppSettings,
   rules = [],
   categoryKeywords,
+  categoryRefAsins = [],
 }: WorkspaceProps) {
   const { t } = useTranslation();
 
@@ -216,22 +219,11 @@ export function Workspace({
       instructionRules,
       negativeRules,
       benchmark,
-      referenceAsins: (task.referenceAsins ?? []).filter(Boolean),
+      referenceAsins: categoryRefAsins.filter(Boolean),
       keywords: categoryKeywords && (categoryKeywords.primary || categoryKeywords.secondary.length > 0)
         ? categoryKeywords
         : undefined,
     };
-  };
-
-  const handleReferenceAsinAdd = (asin: string) => {
-    const current = task.referenceAsins ?? [];
-    if (current.length >= 3 || current.includes(asin)) return;
-    updateTask(task.id, { referenceAsins: [...current, asin] });
-  };
-
-  const handleReferenceAsinRemove = (asin: string) => {
-    const current = task.referenceAsins ?? [];
-    updateTask(task.id, { referenceAsins: current.filter((a) => a !== asin) });
   };
 
   const handleEvaluate = async () => {
@@ -246,8 +238,7 @@ export function Workspace({
         appSettings.model,
         appSettings.apiKey,
       );
-      const hash = hashListingContent(edits.title, edits.bullets, edits.description);
-      updateTask(task.id, { evaluation: report, evaluationHash: hash });
+      updateTask(task.id, { evaluation: report });
     } catch (err) {
       console.error('[evaluate]', err);
       setRewriteError(parseLLMError(err));
@@ -466,8 +457,6 @@ export function Workspace({
             onGlobalRegenerate={handleGlobalRegenerate}
             onTranslationLangChange={(lang) => setAppSettings({ translationLang: lang })}
             onTranslate={handleTranslate}
-            onReferenceAsinAdd={handleReferenceAsinAdd}
-            onReferenceAsinRemove={handleReferenceAsinRemove}
           />
 
           <div className="flex-1 overflow-y-auto p-6">

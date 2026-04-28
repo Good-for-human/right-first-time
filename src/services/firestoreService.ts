@@ -24,7 +24,7 @@ import {
   type Unsubscribe,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import type { AppSettings, Rule, Persona, Task, KeywordMap } from '@/types';
+import type { AppSettings, Rule, Persona, Task, KeywordMap, CategoryRefAsinMap } from '@/types';
 import {
   INITIAL_SETTINGS,
   INITIAL_CATEGORIES,
@@ -112,9 +112,15 @@ export function subscribeCategories(cb: (list: string[]) => void): Unsubscribe {
   });
 }
 
-export function subscribeKeywords(cb: (map: KeywordMap) => void): Unsubscribe {
+export function subscribeKeywords(
+  cb: (map: KeywordMap, refAsins: CategoryRefAsinMap) => void,
+): Unsubscribe {
   return onSnapshot(kwDoc(), (snap) => {
-    cb(snap.exists() ? ((snap.data().map as KeywordMap) ?? {}) : {});
+    const data = snap.exists() ? snap.data() : {};
+    cb(
+      (data.map as KeywordMap) ?? {},
+      (data.refAsins as CategoryRefAsinMap) ?? {},
+    );
   });
 }
 
@@ -166,9 +172,13 @@ export function fsUpdateCategories(list: string[]): void {
   setDoc(catDoc(), { list }).catch(console.error);
 }
 
-// ── Keyword mutations ─────────────────────────────────────────
+// ── Keyword / RefAsin mutations ───────────────────────────────
 export function fsSetKeywords(map: KeywordMap): void {
-  setDoc(kwDoc(), { map: stripUndefined(map) }).catch(console.error);
+  setDoc(kwDoc(), { map: stripUndefined(map) }, { merge: true }).catch(console.error);
+}
+
+export function fsSetCategoryRefAsins(refAsins: CategoryRefAsinMap): void {
+  setDoc(kwDoc(), { refAsins: stripUndefined(refAsins) }, { merge: true }).catch(console.error);
 }
 
 // ── Rule mutations ────────────────────────────────────────────

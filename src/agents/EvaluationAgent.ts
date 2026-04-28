@@ -13,11 +13,8 @@ import type {
   ComplianceResultMessage,
   EvaluationResultMessage,
   EvaluationReport,
-  EvaluationScores,
   EvaluationIssue,
   TranslationMap,
-  GeneratedContent,
-  RiskLevel,
 } from '@/types';
 
 const MOCK_TRANSLATIONS: TranslationMap = {
@@ -39,46 +36,6 @@ const MOCK_TRANSLATIONS: TranslationMap = {
   },
 };
 
-function scoreClarity(content: GeneratedContent): number {
-  const { title, bullets, description } = content;
-  let score = 100;
-  // Penalize very long sentences
-  const avgLen = (title.length + description.length) / 2;
-  if (avgLen > 300) score -= 10;
-  // Penalize if bullet points are not formatted
-  if (!bullets.includes('•') && !bullets.includes('-')) score -= 8;
-  return Math.max(score, 50);
-}
-
-function scoreCompleteness(content: GeneratedContent): number {
-  const combined = `${content.title} ${content.bullets} ${content.description}`.toLowerCase();
-  let score = 70;
-  const indicators = ['mbps', 'ghz', 'band', 'antenna', 'mu-mimo', 'ofdma', 'beamforming', 'onemesh', 'alexa', 'vpn'];
-  indicators.forEach((kw) => { if (combined.includes(kw)) score += 3; });
-  return Math.min(score, 100);
-}
-
-function scoreSearchability(content: GeneratedContent): number {
-  let score = 80;
-  // Check for uppercase prefix pattern in bullets
-  if (/[A-Z]{2,}:/.test(content.bullets)) score += 10;
-  // Check brand prefix in title
-  if (content.title.startsWith('TP-Link')) score += 5;
-  return Math.min(score, 100);
-}
-
-function scoreCompliance(sectionViolations: boolean[]): number {
-  const passedCount = sectionViolations.filter(Boolean).length;
-  return Math.round((passedCount / sectionViolations.length) * 100);
-}
-
-function deriveRiskLevel(scores: EvaluationScores, issues: EvaluationIssue[]): RiskLevel {
-  const errorCount = issues.filter((i) => i.type === 'Error').length;
-  const avgScore = Object.values(scores).reduce((a, b) => a + b, 0) / 4;
-  if (errorCount > 0 || scores.compliance < 70) return 'High';
-  if (avgScore < 80 || issues.length > 2) return 'Medium';
-  return 'Low';
-}
 
 export class EvaluationAgent {
   run(input: ComplianceResultMessage): EvaluationResultMessage {
@@ -108,21 +65,8 @@ export class EvaluationAgent {
       });
     }
 
-    const sectionPassed = (['title', 'bullets', 'description'] as const).map(
-      (s) => sectionMetadata[s]?.negativeCheck?.passed ?? true
-    );
-
-    const scores: EvaluationScores = {
-      clarity: scoreClarity(generatedContent),
-      completeness: scoreCompleteness(generatedContent),
-      searchability: scoreSearchability(generatedContent),
-      compliance: scoreCompliance(sectionPassed),
-    };
-
     const report: EvaluationReport = {
-      scores,
       issues,
-      riskLevel: deriveRiskLevel(scores, issues),
     };
 
     return {

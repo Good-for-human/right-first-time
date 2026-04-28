@@ -33,7 +33,7 @@ export default function App() {
   const { categories, rules, personas, addCategory, removeCategory, addRule, updateRule, removeRule, addPersona, updatePersona, removePersona } = useRulesStore();
   const { appSettings, setAppSettings, persistAppSettings } = useSettingsStore();
   const { user, authLoading } = useAuthStore();
-  const { keywords, setKeywordSet } = useKeywordsStore();
+  const { keywords, setKeywordSet, categoryRefAsins, addCategoryRefAsin, removeCategoryRefAsin } = useKeywordsStore();
 
   // Bootstrap Auth listener + Firestore real-time sync
   useFirestoreSync();
@@ -98,6 +98,7 @@ export default function App() {
             setAppSettings={setAppSettings}
             rules={rules}
             categoryKeywords={activeTask ? keywords[activeTask.category] : undefined}
+            categoryRefAsins={activeTask ? (categoryRefAsins[activeTask.category] ?? []) : []}
           />
         ) : (
           <SettingsAndRules
@@ -118,6 +119,9 @@ export default function App() {
             onDeletePersona={(persona) => setModal({ type: 'deletePersona', persona })}
             keywords={keywords}
             onSetKeywords={setKeywordSet}
+            categoryRefAsins={categoryRefAsins}
+            onAddCategoryRefAsin={addCategoryRefAsin}
+            onRemoveCategoryRefAsin={removeCategoryRefAsin}
           />
         )}
       </div>

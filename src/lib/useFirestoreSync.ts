@@ -46,7 +46,8 @@ export function useFirestoreSync() {
   const setPersonas    = useRulesStore((s) => s.setPersonas);
   const setTasks       = useTaskStore((s) => s.setTasks);
   const setLoading     = useTaskStore((s) => s.setLoading);
-  const setKeywords    = useKeywordsStore((s) => s.setKeywords);
+  const setKeywords        = useKeywordsStore((s) => s.setKeywords);
+  const setCategoryRefAsins = useKeywordsStore((s) => s.setCategoryRefAsins);
 
   useEffect(() => {
     let fsUnsubs: Array<() => void> = [];
@@ -78,7 +79,7 @@ export function useFirestoreSync() {
         subscribeRules((r)      => { setRules(r);        markFired('rules');      }),
         subscribePersonas((p)   => { setPersonas(p);     markFired('personas');   }),
         subscribeTasks((t)      => { setTasks(t);        markFired('tasks');      }),
-        subscribeKeywords((m)   => { setKeywords(m);     markFired('keywords');   }),
+        subscribeKeywords((m, r) => { setKeywords(m); setCategoryRefAsins(r); markFired('keywords'); }),
       ];
     };
 
@@ -90,6 +91,7 @@ export function useFirestoreSync() {
       setPersonas([]);
       setTasks([]);
       setKeywords({});
+      setCategoryRefAsins({});
       setLoading(false);
     };
 

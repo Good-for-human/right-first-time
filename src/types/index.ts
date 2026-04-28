@@ -63,10 +63,8 @@ export interface Task {
   // ── Reference ASINs — task-level style benchmarks (max 3), highest LLM priority ──
   referenceAsins?: string[];
 
-  // ── AI evaluation (COSMO scoring) ─────────────────────────
+  // ── AI evaluation (issue highlights) ──────────────────────
   evaluation?: EvaluationReport;
-  /** Simple hash of title+bullets+description at evaluation time; used to detect substantial changes. */
-  evaluationHash?: string;
 }
 
 // ============================================================
@@ -167,9 +165,8 @@ export interface EvaluationIssue {
 }
 
 export interface EvaluationReport {
-  scores: EvaluationScores;
+  /** List of compliance / quality issues found by the model. Empty = no issues. */
   issues: EvaluationIssue[];
-  riskLevel: RiskLevel;
 }
 
 // ============================================================
@@ -276,6 +273,9 @@ export interface KeywordSet {
 
 /** Map of category name → keyword set. */
 export type KeywordMap = Record<string, KeywordSet>;
+
+/** Map of category name → up to 3 reference ASINs (category-level benchmarks). */
+export type CategoryRefAsinMap = Record<string, string[]>;
 
 // ============================================================
 // UI Helper Types

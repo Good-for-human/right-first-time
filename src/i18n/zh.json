@@ -44,9 +44,11 @@
     "evaluating": "AI 评分中…",
     "noEvaluation": "尚未生成评估报告",
     "evaluateNow": "立即评估",
-    "translateSection": "翻译此板块",
+    "translateSection": "翻译",
+    "globalTranslate": "全局翻译",
     "previewMode": "预览",
-    "editMode": "编辑"
+    "editMode": "编辑",
+    "evalNoIssues": "未发现合规或质量问题"
   },
   "score": {
     "clarity": "可读性",
@@ -98,6 +100,8 @@
     "negRules": "风控红线",
     "noGenRules": "暂无生成规则",
     "noNegRules": "暂无风控红线",
+    "refAsin": "参考 ASIN",
+    "refAsinDesc": "为本类目设置最多 3 个参考 ASIN（高质量同类标杆 listing），AI 生成时会以此为最高优先级样式参考。",
     "keywordLib": "关键词库",
     "keywordLibDesc": "此处设置的关键词将融入 AI 生成的各板块 listing。首推关键词须完整出现在标题和首个卖点中；次推关键词在不影响整体语言质量的前提下尽量自然覆盖。关键词须完全匹配，不可使用同义替换。",
     "kwPrimary": "首推关键词（1 个）",

@@ -401,22 +401,9 @@ export interface EvaluateListingInput {
 }
 
 /**
- * Lightweight djb2-style hash — enough to detect substantial content changes.
- * Exported so the Workspace can compare without importing the full llm module conditionally.
- */
-export function hashListingContent(title: string, bullets: string, description: string): string {
-  const combined = `${title}|||${bullets}|||${description}`;
-  let h = 5381;
-  for (let i = 0; i < combined.length; i++) {
-    h = ((h << 5) + h) ^ combined.charCodeAt(i);
-    h = h >>> 0; // keep unsigned 32-bit
-  }
-  return String(h);
-}
-
-/**
- * Ask the model to evaluate the listing across four COSMO dimensions (0-100).
- * Returns an EvaluationReport ready to persist on the Task.
+ * Ask the model to audit the listing for compliance / quality issues.
+ * Uses plain-text output (no JSON) so all models can respond reliably.
+ * Returns an EvaluationReport with only the issues found.
  */
 export async function evaluateListing(
   input: EvaluateListingInput,
@@ -424,20 +411,19 @@ export async function evaluateListing(
   apiKey: string,
 ): Promise<import('@/types').EvaluationReport> {
   const systemPrompt =
-    `You are an Amazon product listing quality analyst using the COSMO framework.\n` +
-    `Score each dimension 0-100 and output ONLY a raw JSON object (no markdown, no explanation):\n` +
-    `{\n  "scores": {"clarity":<0-100>,"completeness":<0-100>,"searchability":<0-100>,"compliance":<0-100>},\n` +
-    `  "issues": [{"type":"Warning"|"Error","text":"<brief description>"}],\n` +
-    `  "riskLevel": "Low"|"Medium"|"High"\n}\n\n` +
-    `Scoring guide:\n` +
-    `• clarity (0-100): clear, concise, customer-friendly language\n` +
-    `• completeness (0-100): key features, specs, and benefits fully covered\n` +
-    `• searchability (0-100): relevant keywords naturally integrated for Amazon SEO\n` +
-    `• compliance (0-100): no prohibited terms, policy violations, or unverifiable superlatives\n\n` +
-    `Set riskLevel to "High" if compliance < 70 or any "Error" exists; "Medium" if compliance < 85 or any "Warning"; otherwise "Low".`;
+    `You are an Amazon product listing compliance and quality auditor.\n` +
+    `Analyze the listing and report ONLY actual problems. Do NOT invent issues.\n` +
+    `For each problem output EXACTLY one line in this format — nothing else:\n` +
+    `WARNING: <brief description of a quality issue>\n` +
+    `ERROR: <brief description of a policy/compliance violation>\n\n` +
+    `Guidelines:\n` +
+    `• WARNING — quality issues: vague claims, missing key specs, weak differentiation\n` +
+    `• ERROR — policy violations: prohibited superlatives (best/#1), unverifiable claims, illegal content\n` +
+    `• If no issues are found, output exactly: OK\n` +
+    `• Maximum 8 lines. No JSON, no markdown, no explanation.`;
 
   const userPrompt =
-    `Evaluate this Amazon product listing (category: ${input.category}):\n\n` +
+    `Audit this Amazon product listing (category: ${input.category}):\n\n` +
     `TITLE:\n${input.title}\n\nBULLETS:\n${input.bullets}\n\nDESCRIPTION:\n${input.description}`;
 
   const raw = await callLLM(
@@ -445,27 +431,19 @@ export async function evaluateListing(
       { role: 'system', content: systemPrompt },
       { role: 'user',   content: userPrompt },
     ],
-    model, apiKey, { temperature: 0.1, maxTokens: 1024 },
+    model, apiKey, { temperature: 0.1, maxTokens: 512 },
   );
 
-  const parsed = extractJSON<{
-    scores: { clarity: number; completeness: number; searchability: number; compliance: number };
-    issues: { type: 'Warning' | 'Error'; text: string }[];
-    riskLevel: 'Low' | 'Medium' | 'High';
-  }>(raw.content);
+  const lines = raw.content.split('\n').map((l) => l.trim()).filter(Boolean);
+  const issues: import('@/types').EvaluationIssue[] = lines
+    .filter((l) => /^(WARNING|ERROR):\s/i.test(l))
+    .slice(0, 8)
+    .map((l) => ({
+      type: l.toUpperCase().startsWith('ERROR:') ? 'Error' : 'Warning',
+      text: l.replace(/^(WARNING|ERROR):\s*/i, '').trim(),
+    }));
 
-  if (!parsed) throw new Error('evaluateListing: JSON parse failed');
-
-  return {
-    scores: {
-      clarity:       Math.min(100, Math.max(0, Math.round(parsed.scores?.clarity       ?? 75))),
-      completeness:  Math.min(100, Math.max(0, Math.round(parsed.scores?.completeness  ?? 75))),
-      searchability: Math.min(100, Math.max(0, Math.round(parsed.scores?.searchability ?? 75))),
-      compliance:    Math.min(100, Math.max(0, Math.round(parsed.scores?.compliance    ?? 75))),
-    },
-    issues:    Array.isArray(parsed.issues) ? parsed.issues : [],
-    riskLevel: parsed.riskLevel ?? 'Low',
-  };
+  return { issues };
 }
 
 // ── Listing generation (AI rewrite) ──────────────────────────

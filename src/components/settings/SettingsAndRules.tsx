@@ -5,7 +5,7 @@ import { LLMConfig } from './LLMConfig';
 import { TinyfishConfig } from './TinyfishConfig';
 import { PersonaLibrary } from './PersonaLibrary';
 import { CategoryRulesLibrary } from './CategoryRulesLibrary';
-import type { AppSettings, Persona, Rule, Task, KeywordMap, KeywordSet } from '@/types';
+import type { AppSettings, Persona, Rule, Task, KeywordMap, KeywordSet, CategoryRefAsinMap } from '@/types';
 import { LANGUAGES } from '@/constants';
 
 interface SettingsAndRulesProps {
@@ -27,6 +27,9 @@ interface SettingsAndRulesProps {
   onDeletePersona: (persona: Persona) => void;
   keywords?: KeywordMap;
   onSetKeywords?: (category: string, set: KeywordSet) => void;
+  categoryRefAsins?: CategoryRefAsinMap;
+  onAddCategoryRefAsin?: (category: string, asin: string) => void;
+  onRemoveCategoryRefAsin?: (category: string, asin: string) => void;
 }
 
 export function SettingsAndRules({
@@ -47,6 +50,9 @@ export function SettingsAndRules({
   onDeletePersona,
   keywords,
   onSetKeywords,
+  categoryRefAsins,
+  onAddCategoryRefAsin,
+  onRemoveCategoryRefAsin,
 }: SettingsAndRulesProps) {
   const { t, i18n } = useTranslation();
   const [isSaving, setIsSaving] = useState(false);
@@ -139,6 +145,9 @@ export function SettingsAndRules({
             onDeleteRule={onDeleteRule}
             keywords={keywords}
             onSetKeywords={onSetKeywords}
+            categoryRefAsins={categoryRefAsins}
+            onAddCategoryRefAsin={onAddCategoryRefAsin}
+            onRemoveCategoryRefAsin={onRemoveCategoryRefAsin}
           />
         </div>
       </div>
