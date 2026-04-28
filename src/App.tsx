@@ -152,6 +152,7 @@ export default function App() {
         <PersonaModal
           existing={modal.type === 'editPersona' ? modal.persona : undefined}
           onClose={closeModal}
+          appSettings={appSettings}
           onSave={(data) => {
             if (modal.type === 'editPersona') {
               updatePersona(modal.persona.id, data);
