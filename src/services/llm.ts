@@ -7,16 +7,20 @@ type LLMProvider = 'openai' | 'anthropic' | 'google';
 const MODEL_PROVIDERS: Record<LLMModel, LLMProvider> = {
   'gpt-5.3-chat-latest': 'openai',
   'gpt-5.4-pro':         'openai',
+  'gpt-5.5':             'openai',
   'claude-3-7-sonnet':   'anthropic',
   'claude-3-5-haiku':    'anthropic',
   'gemini-2.5-pro':   'google',
   'gemini-2.5-flash': 'google',
 };
 
+const GLOBAL_CATEGORY_ALIASES = new Set(['general', '通用']);
+
 // Canonical OpenAI / Google API model IDs (see platform.openai.com & ai.google.dev)
 const MODEL_IDS: Record<LLMModel, string> = {
   'gpt-5.3-chat-latest': 'gpt-5.3-chat-latest',
   'gpt-5.4-pro':         'gpt-5.4-pro',
+  'gpt-5.5':             'gpt-5.5',
   'claude-3-7-sonnet':   'claude-3-7-sonnet-20250219',
   'claude-3-5-haiku':    'claude-3-5-haiku-20241022',
   'gemini-2.5-pro':   'gemini-2.5-pro',
@@ -34,6 +38,21 @@ const GOOGLE_API_VERSION: Partial<Record<LLMModel, 'v1' | 'v1beta'>> = {
 export function parseLLMError(err: unknown): string {
   const raw = err instanceof Error ? err.message : String(err);
 
+  // Short-circuit: errors thrown from non-LLM code paths (Firebase Storage,
+  // auth, etc.) already carry user-facing Chinese text. Re-running them
+  // through the LLM heuristics below has produced spectacular false
+  // positives (e.g. a Storage CORS failure being shown as "API 密钥无效"),
+  // so we bail out and pass the original message through verbatim.
+  if (
+    raw.startsWith('Firebase Storage') ||
+    raw.startsWith('Firebase ') ||
+    raw.includes('未登录账号') ||
+    raw.includes('需要 OpenAI API') ||
+    raw.includes('安全规则未放行')
+  ) {
+    return raw;
+  }
+
   // 503 / UNAVAILABLE — Google capacity (often temporary; not specific to target language)
   if (raw.includes('503') || raw.includes('UNAVAILABLE') || raw.includes('high demand')) {
     return 'Google 模型当前负载过高（503 / 暂时不可用），通常几分钟内会恢复。\n已自动重试仍失败时：请稍后再点「翻译」，或在设置中改用 Gemini 2.5 Flash。';
@@ -45,9 +64,24 @@ export function parseLLMError(err: unknown): string {
     }
     return 'API 请求频率超限 (429)。请稍后片刻再试，或换用 GPT-5.3 Chat / Gemini 2.5 Flash 等轻量模型。';
   }
-  // 401 / 403 invalid key
-  if (raw.includes('401') || raw.includes('403') || raw.includes('invalid') || raw.includes('Unauthorized')) {
+  // 400 unsupported parameter (e.g. max_tokens vs max_completion_tokens on GPT-5.x)
+  if (raw.includes('unsupported_parameter') || raw.includes('Unsupported parameter')) {
+    const m = raw.match(/'([a-zA-Z_]+)'/);
+    const param = m ? m[1] : '某个参数';
+    return `当前模型不支持参数 ${param}（400）。这通常是模型与请求字段不匹配引起的，已在新版本中适配；请刷新页面后重试，若仍失败请换用 GPT-5.3 Chat 或 Gemini 2.5 Flash。`;
+  }
+  // 401 / 403 invalid key — match status codes or auth-specific messages, not a generic "invalid"
+  if (
+    raw.includes(' 401') || raw.includes(' 403') ||
+    raw.includes('Unauthorized') || raw.includes('invalid_api_key') ||
+    raw.includes('incorrect_api_key') || raw.includes('invalid x-api-key') ||
+    raw.includes('"code":"invalid_api_key"') || raw.includes('"code": "invalid_api_key"')
+  ) {
     return 'API 密钥无效或无权限 (401/403)。请检查设置中填写的密钥是否与所选模型厂商匹配：\n• OpenAI 模型 → sk-...\n• Anthropic 模型 → sk-ant-...\n• Google 模型 → AIza...';
+  }
+  // 400 invalid_request_error (other shape mismatches)
+  if (raw.includes('invalid_request_error')) {
+    return '请求参数与该模型不兼容（400 invalid_request_error）。请刷新页面后重试，或换用其他模型。';
   }
   // 404 model not found
   if (raw.includes('404') || raw.includes('NOT_FOUND')) {
@@ -74,6 +108,24 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+const OPENAI_PROXY_PATH = '/.netlify/functions/openai-proxy';
+
+async function callOpenAIProxy(
+  endpoint: '/v1/chat/completions' | '/v1/responses',
+  apiKey: string,
+  payload: Record<string, unknown>,
+): Promise<Response> {
+  return fetch(OPENAI_PROXY_PATH, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      endpoint,
+      apiKey,
+      payload,
+    }),
+  });
+}
+
 async function callOpenAI(
   messages: LLMMessage[],
   model: LLMModel,
@@ -81,23 +133,55 @@ async function callOpenAI(
   temperature: number,
   maxTokens: number,
 ): Promise<string> {
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: MODEL_IDS[model],
-      messages,
-      temperature,
-      max_tokens: maxTokens,
-    }),
-  });
+  const modelId = MODEL_IDS[model];
+  // GPT-5.x chat-completions deprecated `max_tokens` in favor of `max_completion_tokens`,
+  // and many GPT-5.x variants only accept the default temperature.
+  const isGpt5 = /^gpt-5/i.test(modelId);
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const body: Record<string, any> = {
+    model: modelId,
+    messages,
+  };
+  if (!isGpt5) {
+    body.temperature = temperature;
+  }
+  if (isGpt5) {
+    body.max_completion_tokens = maxTokens;
+  } else {
+    body.max_tokens = maxTokens;
+  }
+
+  const doRequest = async (payload: Record<string, unknown>): Promise<Response> =>
+    callOpenAIProxy('/v1/chat/completions', apiKey, payload);
+
+  let response = await doRequest(body);
+
+  // Defensive fallback: account/region rollouts of GPT-5.x parameter shapes vary.
+  // If the server reports a parameter mismatch, adjust and retry once.
   if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`OpenAI API error ${response.status}: ${err}`);
+    const errText = await response.text();
+    let retryBody: Record<string, unknown> | null = null;
+
+    if (/'max_tokens'/.test(errText) && /unsupported|not supported/i.test(errText)) {
+      retryBody = { ...body, max_completion_tokens: maxTokens };
+      delete (retryBody as Record<string, unknown>).max_tokens;
+    } else if (/'max_completion_tokens'/.test(errText) && /unsupported|not supported/i.test(errText)) {
+      retryBody = { ...body, max_tokens: maxTokens };
+      delete (retryBody as Record<string, unknown>).max_completion_tokens;
+    } else if (/'temperature'/.test(errText) && /unsupported|not supported|does not support/i.test(errText)) {
+      retryBody = { ...body };
+      delete (retryBody as Record<string, unknown>).temperature;
+    }
+
+    if (!retryBody) {
+      throw new Error(`OpenAI API error ${response.status}: ${errText}`);
+    }
+    response = await doRequest(retryBody);
+    if (!response.ok) {
+      const err2 = await response.text();
+      throw new Error(`OpenAI API error ${response.status}: ${err2}`);
+    }
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -238,7 +322,15 @@ const LANGUAGE_NAMES: Record<string, string> = {
   fr: 'French',
   it: 'Italian',
   es: 'Spanish',
+  nl: 'Dutch',
+  pl: 'Polish',
+  sv: 'Swedish',
   zh: 'Chinese',
+};
+
+const SYSTEM_LANGUAGE_NAMES: Record<'cn' | 'en', string> = {
+  cn: 'Simplified Chinese',
+  en: 'English',
 };
 
 export interface TranslationInput {
@@ -251,6 +343,40 @@ export interface TranslationOutput {
   title:       string;
   bullets:     string;
   description: string;
+}
+
+/**
+ * Translate generic user-authored text between system UI languages.
+ * Keeps original meaning and style while preserving punctuation and line breaks.
+ */
+export async function translateSystemText(
+  text: string,
+  fromLang: 'cn' | 'en',
+  toLang: 'cn' | 'en',
+  model: LLMModel,
+  apiKey: string,
+): Promise<string> {
+  const normalized = text.trim();
+  if (!normalized || fromLang === toLang) return normalized;
+
+  const fromName = SYSTEM_LANGUAGE_NAMES[fromLang];
+  const toName = SYSTEM_LANGUAGE_NAMES[toLang];
+
+  const systemPrompt =
+    `You are a precise product-content translator. Translate from ${fromName} to ${toName}. ` +
+    'Keep original meaning, tone, punctuation, and line breaks. ' +
+    'Output ONLY the translated text with no extra explanation.';
+
+  const raw = await callLLM(
+    [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: normalized },
+    ],
+    model,
+    apiKey,
+    { temperature: 0.1, maxTokens: 1024 },
+  );
+  return raw.content.trim();
 }
 
 export async function translateContent(
@@ -497,6 +623,15 @@ export interface GenerateListingOptions {
 
 /**
  * Rewrites an Amazon product listing using COSMO-aligned prompting.
+ *
+ * Prompt architecture (data-isolation design):
+ *   BLOCK 1 — HARD CONSTRAINTS (negative rules, section-scoped, placed FIRST so the model
+ *             treats them as an absolute rejection checklist, not mixed with positive guidance)
+ *   BLOCK 2 — GENERATION DIRECTIVES (positive instruction rules, tiered by priority)
+ *   BLOCK 3 — KEYWORDS (exact-match requirements)
+ *   BLOCK 4 — AUDIENCE (personas)
+ *   BLOCK 5 — BENCHMARK (optional style reference)
+ *
  * Always returns all three fields; the caller decides which to apply.
  */
 export async function generateListing(
@@ -505,136 +640,195 @@ export async function generateListing(
   model: LLMModel,
   apiKey: string,
 ): Promise<{ title: string; bullets: string; description: string }> {
-  const { section = 'all', personas = [], instructionRules = [], negativeRules = [], benchmark, referenceAsins = [], keywords } = options;
-  const langName = LANGUAGE_NAMES[input.language] ?? input.language;
+  const {
+    section = 'all',
+    personas = [],
+    instructionRules = [],
+    negativeRules = [],
+    benchmark,
+    referenceAsins = [],
+    keywords,
+  } = options;
 
-  // ── Build rules block (3-tier priority) ──────────────────────
-  const sectionFilter = (t: string) => section === 'all' || t === 'all' || t === section;
-  const GLOBAL_CAT = '通用';
+  const langName   = LANGUAGE_NAMES[input.language] ?? input.language;
+  const isGlobalCategory = (category: string) => GLOBAL_CATEGORY_ALIASES.has(category.trim().toLowerCase());
 
-  const instrFiltered = instructionRules.filter((r) => sectionFilter(r.targetSection));
-  const negFiltered   = negativeRules.filter((r) => sectionFilter(r.targetSection));
+  // Section scope: only include rules that apply to the section(s) being written.
+  // This prevents pollution of the context with rules for untouched sections.
+  const appliesToSection = (t: string) => section === 'all' || t === 'all' || t === section;
 
-  const gInstr = instrFiltered.filter((r) => r.category === GLOBAL_CAT);
-  const cInstr = instrFiltered.filter((r) => r.category === input.category && r.category !== GLOBAL_CAT);
-  const gNeg   = negFiltered.filter((r) => r.category === GLOBAL_CAT);
-  const cNeg   = negFiltered.filter((r) => r.category === input.category && r.category !== GLOBAL_CAT);
+  const instrFiltered = instructionRules.filter((r) => appliesToSection(r.targetSection));
+  const negFiltered   = negativeRules.filter((r) => appliesToSection(r.targetSection));
 
-  const isReq = (p?: string) => p === 'Required';
-  const fmtInstrList = (list: GenerateInstructionRule[], bucket: 'req' | 'sug') => {
-    const rows = list.filter((r) => (bucket === 'req' ? isReq(r.priority) : !isReq(r.priority)));
-    return rows.length
-      ? rows.map((r) => `    • [#${r.id}][${r.category}][${r.targetSection}] ${r.name}`).join('\n')
-      : '    (none)';
-  };
-  const fmtNegList = (list: GenerateNegativeRule[], sev: 'Critical' | 'other') => {
-    const rows = list.filter((r) => (sev === 'Critical' ? r.severity === 'Critical' : r.severity !== 'Critical'));
-    return rows.length
-      ? rows.map((r) => `    • [#${r.id}][${r.category}][${r.targetSection}] ${r.name}`).join('\n')
-      : '    (none)';
-  };
+  // Partition by source: global (General/通用) vs category-specific
+  const gInstr = instrFiltered.filter((r) => isGlobalCategory(r.category));
+  const cInstr = instrFiltered.filter((r) => !isGlobalCategory(r.category));
+  const allNeg = negFiltered; // already scoped; global + category mixed together is intentional for negatives
 
-  /**
-   * Priority order (user-defined):
-   * Tier 1 (MUST): referenceAsins = category Required = negative Critical
-   * Tier 2 (HIGH): global Required = category Suggested = negative High
-   * Tier 3 (GUIDANCE): global Suggested
-   */
-  const rulesBlock = [
-    '════ TIER 1 — HIGHEST PRIORITY (MUST enforce) ════',
-    // 1a. Reference ASINs
-    referenceAsins.length
-      ? [
-          'REFERENCE ASINs (top-performing listings — emulate their style, length & structure):',
-          referenceAsins.map((a) => `    • ${a}`).join('\n'),
-        ].join('\n')
-      : null,
-    // 1b. Category Required instruction rules
-    `CATEGORY (${input.category}) — Required instruction rules:`,
-    fmtInstrList(cInstr, 'req'),
-    // 1c. Negative Critical (both global + category)
-    `NEGATIVE / PROHIBITED — Critical severity (${GLOBAL_CAT} + ${input.category}):`,
-    fmtNegList([...gNeg, ...cNeg], 'Critical'),
-    '',
-    '════ TIER 2 — HIGH PRIORITY (should follow) ════',
-    // 2a. Global Required
-    `GLOBAL (${GLOBAL_CAT}) — Required instruction rules:`,
-    fmtInstrList(gInstr, 'req'),
-    // 2b. Category Suggested
-    `CATEGORY (${input.category}) — Suggested instruction rules:`,
-    fmtInstrList(cInstr, 'sug'),
-    // 2c. Negative High (both global + category)
-    `NEGATIVE / PROHIBITED — High severity (${GLOBAL_CAT} + ${input.category}):`,
-    fmtNegList([...gNeg, ...cNeg], 'other'),
-    '',
-    '════ TIER 3 — GUIDANCE (best effort) ════',
-    // 3a. Global Suggested
-    `GLOBAL (${GLOBAL_CAT}) — Suggested instruction rules:`,
-    fmtInstrList(gInstr, 'sug'),
-  ].filter((l) => l !== null).join('\n');
+  const isRequired = (p?: string) => p === 'Required';
+  const isCritical = (s?: string) => s === 'Critical';
 
-  // ── Keywords block (EXACT MATCH) ─────────────────────────
+  // Format helpers — clean rule text only, no DB metadata IDs in the prompt
+  const fmtNeg = (list: GenerateNegativeRule[]) =>
+    list.map((r, i) => `  ${i + 1}. ${r.name}`).join('\n');
+
+  const fmtInstr = (list: GenerateInstructionRule[]) =>
+    list.map((r) => `  • ${r.name}`).join('\n');
+
+  // ── BLOCK 1: HARD CONSTRAINTS (negative rules, always placed first) ──────
+  const criticalNeg = allNeg.filter((r) => isCritical(r.severity));
+  const highNeg     = allNeg.filter((r) => !isCritical(r.severity));
+
+  const hardConstraintsBlock = (() => {
+    const lines: string[] = [];
+    lines.push('╔══════════════════════════════════════════════════════════════╗');
+    lines.push('║  HARD CONSTRAINTS — CHECK EVERY WORD OF YOUR OUTPUT AGAINST  ║');
+    lines.push('║  THIS LIST BEFORE RESPONDING. VIOLATIONS ARE NOT ACCEPTABLE. ║');
+    lines.push('╚══════════════════════════════════════════════════════════════╝');
+    lines.push('');
+
+    if (criticalNeg.length > 0) {
+      lines.push('🚫 ABSOLUTELY PROHIBITED (policy violations — zero tolerance):');
+      lines.push(fmtNeg(criticalNeg));
+    } else {
+      lines.push('🚫 ABSOLUTELY PROHIBITED: (no critical constraints configured)');
+    }
+
+    lines.push('');
+
+    if (highNeg.length > 0) {
+      lines.push('⚠️  STRONGLY AVOID (high-risk — rewrite if any appear in output):');
+      lines.push(fmtNeg(highNeg));
+    }
+
+    lines.push('');
+    lines.push('SELF-CHECK RULE: After drafting your output, re-read every sentence.');
+    lines.push('If ANY item from the lists above appears → rewrite that part before outputting.');
+    lines.push('Do not rationalise exceptions. These are hard stops.');
+    lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+    return lines.join('\n');
+  })();
+
+  // ── BLOCK 2: GENERATION DIRECTIVES (positive instruction rules, 3-tier) ──
+  //
+  // Tier 1 (MUST): category Required + reference ASINs
+  // Tier 2 (HIGH):  global Required + category Suggested
+  // Tier 3 (GUIDANCE): global Suggested
+  const cInstrReq  = cInstr.filter((r) =>  isRequired(r.priority));
+  const cInstrSug  = cInstr.filter((r) => !isRequired(r.priority));
+  const gInstrReq  = gInstr.filter((r) =>  isRequired(r.priority));
+  const gInstrSug  = gInstr.filter((r) => !isRequired(r.priority));
+
+  const directivesBlock = (() => {
+    const lines: string[] = [];
+
+    // Tier 1
+    lines.push('━━━ TIER 1 — MUST FOLLOW (highest priority) ━━━');
+    if (referenceAsins.length > 0) {
+      lines.push(`Reference ASINs — emulate their writing style, sentence length, and structure:`);
+      lines.push(referenceAsins.map((a) => `  • ASIN: ${a}`).join('\n'));
+    }
+    if (cInstrReq.length > 0) {
+      lines.push(`Category rules — ${input.category} (Required):`);
+      lines.push(fmtInstr(cInstrReq));
+    }
+    if (referenceAsins.length === 0 && cInstrReq.length === 0) {
+      lines.push('  (no Tier 1 directives configured)');
+    }
+
+    lines.push('');
+
+    // Tier 2
+    lines.push('━━━ TIER 2 — HIGH PRIORITY (follow unless Tier 1 conflicts) ━━━');
+    if (gInstrReq.length > 0) {
+      lines.push('General rules (Required):');
+      lines.push(fmtInstr(gInstrReq));
+    }
+    if (cInstrSug.length > 0) {
+      lines.push(`Category rules — ${input.category} (Suggested):`);
+      lines.push(fmtInstr(cInstrSug));
+    }
+    if (gInstrReq.length === 0 && cInstrSug.length === 0) {
+      lines.push('  (no Tier 2 directives configured)');
+    }
+
+    lines.push('');
+
+    // Tier 3
+    if (gInstrSug.length > 0) {
+      lines.push('━━━ TIER 3 — GUIDANCE (best effort) ━━━');
+      lines.push('General rules (Suggested):');
+      lines.push(fmtInstr(gInstrSug));
+    }
+
+    return lines.join('\n');
+  })();
+
+  // ── BLOCK 3: Keywords (exact match) ──────────────────────────────────────
   const keywordsBlock = keywords && (keywords.primary || keywords.secondary.length > 0)
     ? [
-        '════ KEYWORDS — EXACT MATCH REQUIRED (no synonyms, no paraphrases) ════',
+        '━━━ KEYWORDS — EXACT MATCH REQUIRED (no synonyms, no paraphrases) ━━━',
         keywords.primary
-          ? `PRIMARY KEYWORD (must appear in title and first bullet):\n    • ${keywords.primary}`
+          ? `PRIMARY (must appear verbatim in title and first bullet):\n  → ${keywords.primary}`
           : null,
         keywords.secondary.length > 0
-          ? `SECONDARY KEYWORDS (include naturally throughout, best-effort, do not force if unnatural):\n${keywords.secondary.map((k) => `    • ${k}`).join('\n')}`
+          ? `SECONDARY (include naturally, best-effort, do not force if unnatural):\n${keywords.secondary.map((k) => `  → ${k}`).join('\n')}`
           : null,
-      ].filter((l) => l !== null).join('\n')
-    : '';
+      ].filter(Boolean).join('\n')
+    : null;
 
-  // ── Personas block ────────────────────────────────────────
+  // ── BLOCK 4: Personas ─────────────────────────────────────────────────────
   const personasBlock = personas.length
     ? personas.map((p, i) => `  ${i + 1}. ${p.name}: ${p.description}`).join('\n')
-    : '  (general consumer)';
+    : '  (general consumer — broad appeal)';
 
-  // ── Benchmark block ───────────────────────────────────────
+  // ── BLOCK 5: Benchmark ────────────────────────────────────────────────────
   const benchmarkBlock = benchmark
     ? [
-        '── BENCHMARK REFERENCE LISTING (adopt this style & structure) ──',
+        '━━━ BENCHMARK REFERENCE LISTING (match this style & structure) ━━━',
         `TITLE: ${benchmark.title}`,
         `BULLETS:\n${benchmark.bullets}`,
         `DESCRIPTION:\n${benchmark.description}`,
       ].join('\n')
-    : '';
+    : null;
 
-  // ── Rewrite scope instruction ─────────────────────────────
+  // ── Scope instruction ─────────────────────────────────────────────────────
   const scopeNote =
     section === 'all'
       ? 'Rewrite ALL three sections (title, bullets, description).'
-      : `Rewrite ONLY the [${section.toUpperCase()}] section. Keep the other two sections unchanged — copy them verbatim from the current content.`;
+      : `Rewrite ONLY the [${section.toUpperCase()}] section. ` +
+        `Copy the other two sections VERBATIM from the current content — do NOT touch them.`;
 
+  // ── Assemble system prompt ─────────────────────────────────────────────────
   const systemPrompt = [
-    'You are an expert Amazon product listing copywriter.',
+    `You are an expert Amazon product listing copywriter for the "${input.category}" category.`,
+    `Output language: ${langName}. Keep all generated text in this language — do NOT translate.`,
     '',
-    'COSMO OPTIMIZATION PRINCIPLES (Amazon\'s semantic ranking engine):',
-    '• Use natural language that reflects real customer search intent — never keyword stuffing',
-    '• Write specific, verifiable claims with exact technical specs (e.g. 4804 Mbps, not "~5000 Mbps+")',
-    '• Embed 2-3 concrete use-case scenarios in the description',
-    '• Each bullet point must carry a single distinct value proposition',
+    'COSMO PRINCIPLES (Amazon semantic ranking):',
+    '  • Natural search-intent language — no keyword stuffing',
+    '  • Specific, verifiable claims with exact specs (e.g. "4804 Mbps", not "~5 Gbps")',
+    '  • 2-3 concrete use-case scenarios in description',
+    '  • Each bullet = one distinct, differentiated value proposition',
     '',
-    `PRODUCT CATEGORY: ${input.category}`,
-    `OUTPUT LANGUAGE: ${langName} (listing target language — keep output in this language; do NOT translate to another language)`,
-    'The instruction / negative blocks above are the exact active rules configured in the system for this task category.',
+    hardConstraintsBlock,
     '',
-    rulesBlock,
+    directivesBlock,
     keywordsBlock ? '' : null,
-    keywordsBlock || null,
+    keywordsBlock ?? null,
     '',
-    '── TARGET AUDIENCE PERSONAS ──',
+    '━━━ TARGET AUDIENCE PERSONAS ━━━',
     personasBlock,
     benchmarkBlock ? '' : null,
-    benchmarkBlock || null,
+    benchmarkBlock ?? null,
   ].filter((l) => l !== null).join('\n');
 
+  // ── User prompt ────────────────────────────────────────────────────────────
   const userPrompt = [
     scopeNote,
     'Output ONLY a raw JSON object with exactly these three keys (no markdown fences, no explanation):',
     '{"title": "...", "bullets": "...", "description": "..."}',
-    'For "bullets", use newline characters (\\n) to separate individual bullet points.',
+    'For "bullets", separate each bullet with a newline character (\\n).',
     '',
     '── CURRENT CONTENT TO REWRITE ──',
     `TITLE:\n${input.title}`,
@@ -661,6 +855,241 @@ export async function generateListing(
     bullets:     parsed.bullets     ?? input.bullets,
     description: parsed.description ?? input.description,
   };
+}
+
+// ── Image generation (Image 2) ──────────────────────────────
+
+export type ImageGenMode = 'main' | 'lifestyle';
+
+export interface GenerateProductImageInput {
+  /** Existing product image URLs used as visual references (max 4 sent). */
+  referenceImageUrls: string[];
+  /** Optional generation rules selected by the user. */
+  instructionRules?: GenerateInstructionRule[];
+  negativeRules?:    GenerateNegativeRule[];
+  /** Optional short user prompt appended as highest-priority visual direction. */
+  customPrompt?:     string;
+}
+
+export interface GenerateProductImageOptions {
+  /** 'main' — Amazon main-image style on white bg; 'lifestyle' — in-context use scene. */
+  mode?: ImageGenMode;
+  /** Output square edge (multiple of 16, default 1024). */
+  size?: '1024x1024' | '1536x1024' | '1024x1536';
+  /** Render quality (cost/latency vs fidelity). */
+  quality?: 'low' | 'medium' | 'high' | 'auto';
+}
+
+export interface GenerateProductImageResult {
+  /** Raw base64 image bytes (no data: prefix). PNG by default. */
+  imageBase64: string;
+  /** Mime type to wrap into a data URL when displaying or saving. */
+  mimeType: 'image/png';
+}
+
+/**
+ * Rewrites a product image with Image 2 via the Responses API + image_generation tool.
+ *
+ * Prompt architecture is intentionally narrow:
+ *   The model sees only:
+ *   - primary product reference image (source of product identity)
+ *   - optional style/detail reference images (source of lighting/background/style)
+ *   - selected rules (positive / negative visual constraints)
+ *   - user custom prompt
+ *
+ * Listing text, personas, and keyword libraries are deliberately excluded to
+ * avoid text-driven drift away from the actual reference product.
+ *
+ *   BLOCK 1 — HARD CONSTRAINTS (visual policy: white bg for main, no text overlay,
+ *             negative rules with severity Critical apply as visual prohibitions)
+ *   BLOCK 2 — GENERATION DIRECTIVES (positive instruction rules → visual focal points)
+ *   BLOCK 3 — USER EXTRA INSTRUCTION
+ *   BLOCK 4 — REFERENCE IMAGES (passed as input_image; preserve product identity)
+ *
+ * The Responses API tool path is required to give the model the actual reference
+ * pixels (the Image API edits endpoint requires file uploads; URLs are not supported).
+ */
+export async function generateProductImage(
+  input: GenerateProductImageInput,
+  apiKey: string,
+  options: GenerateProductImageOptions = {},
+): Promise<GenerateProductImageResult> {
+  const requestTag = `RFT-IMG-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const refs = input.referenceImageUrls.filter((u) => /^https?:\/\//.test(u)).slice(0, 4);
+  if (refs.length === 0) {
+    throw new Error('至少需要 1 张产品参考图（http/https URL）才能进行图生图。');
+  }
+  if (!apiKey || !apiKey.startsWith('sk-')) {
+    throw new Error('Image 2 生图需要 OpenAI API 密钥（sk- 开头）。');
+  }
+
+  const {
+    mode = 'main',
+    size = '1024x1024',
+    quality = 'medium',
+  } = options;
+
+  const {
+    instructionRules = [],
+    negativeRules    = [],
+    customPrompt,
+  } = input;
+
+  // Visual rules apply if they target title (cover/hero) or all sections — these are
+  // the directives that govern the product's headline value proposition, which is
+  // exactly what an image must communicate.
+  const isVisual = (t: string) => t === 'all' || t === 'title';
+  const instrFiltered = instructionRules.filter((r) => isVisual(r.targetSection));
+  const negFiltered   = negativeRules.filter((r) => isVisual(r.targetSection));
+
+  const isCritical = (s?: string) => s === 'Critical';
+  const isRequired = (p?: string) => p === 'Required';
+
+  const fmtList = (items: string[]) =>
+    items.map((x, i) => `  ${i + 1}. ${x}`).join('\n');
+
+  // ── BLOCK 1: HARD CONSTRAINTS (visual prohibitions) ─────────────────────
+  const baseProhibitions = [
+    'No watermarks, retailer logos, or third-party brand marks (unless present on the product itself)',
+    'No human faces of identifiable real people / celebrities',
+    'No promotional text overlays such as "Best", "#1", "Sale", price tags, or rating stars',
+    'No infographic-style callouts unless they read as on-pack labels of the actual product',
+  ];
+  const mainImageProhibitions = mode === 'main'
+    ? [
+        'Background MUST be pure white (#FFFFFF). Do not use gradients, props, or scenery.',
+        'Single product centered, occupying ~85% of the frame. No human models or hands.',
+        'No shadow text, no decorative borders, no badges.',
+      ]
+    : [];
+  const ruleNegatives = negFiltered
+    .filter((r) => isCritical(r.severity))
+    .map((r) => r.name);
+
+  const hardConstraints = [
+    '╔══════════════════════════════════════════════════════════════╗',
+    '║  HARD VISUAL CONSTRAINTS — DO NOT VIOLATE. CHECK BEFORE      ║',
+    '║  RETURNING THE IMAGE. ANY MATCH = REGENERATE THAT REGION.    ║',
+    '╚══════════════════════════════════════════════════════════════╝',
+    '',
+    '🚫 ABSOLUTELY PROHIBITED:',
+    fmtList([...baseProhibitions, ...mainImageProhibitions]),
+    ruleNegatives.length > 0 ? '' : null,
+    ruleNegatives.length > 0 ? '🚫 CATEGORY-SPECIFIC PROHIBITIONS (from the listing rule library):' : null,
+    ruleNegatives.length > 0 ? fmtList(ruleNegatives) : null,
+  ].filter((l) => l !== null).join('\n');
+
+  // ── BLOCK 2: GENERATION DIRECTIVES (positive visual focal points) ───────
+  const requiredDirectives = instrFiltered.filter((r) => isRequired(r.priority)).map((r) => r.name);
+  const suggestedDirectives = instrFiltered.filter((r) => !isRequired(r.priority)).map((r) => r.name);
+
+  const directives = [
+    '━━━ VISUAL FOCAL POINTS — features the image MUST communicate ━━━',
+    requiredDirectives.length > 0
+      ? `MUST DEPICT (highest priority — show clearly in the composition):\n${fmtList(requiredDirectives)}`
+      : '  (no required directives — preserve the primary reference product faithfully)',
+    suggestedDirectives.length > 0
+      ? `SHOULD DEPICT (best effort, only if it does not crowd the composition):\n${fmtList(suggestedDirectives)}`
+      : null,
+  ].filter((l) => l !== null).join('\n');
+
+  // ── Mode-specific composition instructions ──────────────────────────────
+  const composition = mode === 'main'
+    ? [
+        'COMPOSITION: Amazon-style main image. Photorealistic studio product photography.',
+        'Single hero product, perfectly lit, soft even shadow under the product, centered,',
+        'pure white seamless background (#FFFFFF). Capture the product faithfully from the',
+        'reference images — same shape, color, label layout, and proportions.',
+      ].join('\n')
+    : [
+        'COMPOSITION: Lifestyle / use-case photography. Photorealistic. Show the product',
+        'in a natural environment. Use secondary references only for scene style, lighting,',
+        'background mood, framing, or surface details. The product',
+        'identity (shape / color / branding) MUST exactly match the reference images.',
+        'Background should reinforce the product\'s use case without distracting from it.',
+      ].join('\n');
+
+  // ── Assemble final prompt ───────────────────────────────────────────────
+  const primaryReferenceLine =
+    refs.length > 1
+      ? [
+          `The FIRST attached image is the PRIMARY product reference (主图参考). Treat it as the canonical truth: preserve its product identity, exact shape, color, materials, labels, logos, on-pack text, and proportions 1:1. The output MUST clearly be the same product instance.`,
+          `The remaining ${refs.length - 1} attached image(s) are STYLE / DETAIL references (辅助参考图) ONLY. Borrow ONLY: lighting mood, background, framing, surface texture, color grading, or specific detail callouts. NEVER copy any product, accessory, packaging, text, person, or object from them. NEVER let style references change the primary product's identity, color, label, or proportions. If a style reference shows a different product, ignore that product entirely.`,
+        ].join('\n')
+      : `The single attached image is the PRIMARY product reference: preserve its product identity, exact shape, color, materials, labels, logos, on-pack text, and proportions 1:1.`;
+
+  const prompt = [
+    `REQUEST TAG: ${requestTag}`,
+    'ROUND ISOLATION (critical): treat this as a brand-new standalone request.',
+    'Do NOT use assumptions, memory, or visual intent from any previous rounds.',
+    'Only follow the current prompt and the images attached in THIS request.',
+    '',
+    'You are a senior Amazon product photographer optimising a product image.',
+    primaryReferenceLine,
+    `Output: a single ${size} photorealistic image suitable for a top-ranked Amazon detail page.`,
+    '',
+    composition,
+    '',
+    hardConstraints,
+    '',
+    directives,
+    customPrompt?.trim()
+      ? ''
+      : null,
+    customPrompt?.trim()
+      ? `USER EXTRA INSTRUCTION (highest priority, keep concise):\n${customPrompt.trim()}`
+      : null,
+    '',
+    'SELF-CHECK before returning:',
+    '  1. Does every prohibited item from the HARD CONSTRAINTS list appear nowhere in the image?',
+    '  2. Is the product visually identical (shape, color, label, proportions) to the PRIMARY reference image?',
+    '  3. Did style/detail references only influence lighting / background / mood — never the product itself?',
+    '  4. Are the required visual focal points clearly visible?',
+    'If any answer is "no", regenerate the offending region.',
+  ].filter((l) => l !== null).join('\n');
+
+  // ── Build Responses API request ─────────────────────────────────────────
+  // IMPORTANT: the top-level `model` must be a text-capable mainline model — the
+  // GPT Image models (gpt-image-1 / gpt-image-2 …) are NOT valid as the Responses
+  // `model` and trigger a 400 invalid_request_error if placed here. The image model
+  // belongs in the image_generation tool's own `model` field.
+  const body = {
+    model: 'gpt-5.5',
+    input: [{
+      role: 'user',
+      content: [
+        { type: 'input_text',  text: prompt },
+        ...refs.map((u) => ({ type: 'input_image', image_url: u })),
+      ],
+    }],
+    tools: [{
+      type: 'image_generation',
+      model: 'gpt-image-2',
+      action: 'edit',
+      quality,
+      size,
+    }],
+  };
+
+  const response = await callOpenAIProxy('/v1/responses', apiKey, body);
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`OpenAI Responses API ${response.status}: ${err.slice(0, 400)}`);
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const json: any = await response.json();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const calls: any[] = Array.isArray(json.output) ? json.output : [];
+  const imgCall = calls.find((o) => o?.type === 'image_generation_call');
+  const b64: string | undefined = imgCall?.result;
+
+  if (!b64 || typeof b64 !== 'string') {
+    throw new Error('OpenAI 未返回图片数据。可能原因：参考图被内容审核拦截，或当前账号无 Image 2 可用权限。');
+  }
+
+  return { imageBase64: b64, mimeType: 'image/png' };
 }
 
 // ── Shared JSON extractor ─────────────────────────────────────
