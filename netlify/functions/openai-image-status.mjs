@@ -1,40 +1,45 @@
 import { getStore } from '@netlify/blobs';
 
-// Fast synchronous poller for the async image job started by
+// Netlify Functions v2 synchronous poller for the async image job started by
 // openai-image-background. Returns the job's terminal result from Netlify Blobs.
 // On a terminal state (done/error) the blob is deleted so results don't pile up.
+// v2 auto-configures Netlify Blobs (the v1 handler style did not).
 
 const STORE_NAME = 'image-jobs';
 
-function buildHeaders(extra = {}) {
-  return {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type',
-    'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
-    'Cache-Control': 'no-store',
-    'Content-Type': 'application/json',
-    ...extra,
-  };
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+  'Cache-Control': 'no-store',
+  'Content-Type': 'application/json',
+};
+
+function json(status, obj) {
+  return new Response(JSON.stringify(obj), { status, headers: CORS });
 }
 
-export const handler = async (event) => {
-  if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 204, headers: buildHeaders(), body: '' };
+export default async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('', { status: 204, headers: CORS });
   }
 
-  const jobId =
-    event.queryStringParameters?.jobId?.trim() ||
-    (() => {
-      try {
-        return (JSON.parse(event.body || '{}').jobId || '').trim();
-      } catch {
-        return '';
-      }
-    })();
-
-  if (!jobId) {
-    return { statusCode: 400, headers: buildHeaders(), body: JSON.stringify({ error: 'Missing jobId' }) };
+  let jobId = '';
+  try {
+    jobId = new URL(req.url).searchParams.get('jobId')?.trim() || '';
+  } catch {
+    jobId = '';
   }
+  if (!jobId && req.method === 'POST') {
+    try {
+      const body = await req.json();
+      jobId = (body?.jobId || '').toString().trim();
+    } catch {
+      jobId = '';
+    }
+  }
+
+  if (!jobId) return json(400, { error: 'Missing jobId' });
 
   try {
     const store = getStore(STORE_NAME);
@@ -42,22 +47,18 @@ export const handler = async (event) => {
 
     if (!result) {
       // Not written yet → still running.
-      return { statusCode: 200, headers: buildHeaders(), body: JSON.stringify({ status: 'pending' }) };
+      return json(200, { status: 'pending' });
     }
 
-    // Terminal state reached — clean up the blob so storage doesn't accumulate.
+    // Terminal state reached — clean up so storage doesn't accumulate.
     try {
       await store.delete(jobId);
     } catch {
       // best-effort cleanup
     }
 
-    return { statusCode: 200, headers: buildHeaders(), body: JSON.stringify(result) };
+    return json(200, result);
   } catch (err) {
-    return {
-      statusCode: 502,
-      headers: buildHeaders(),
-      body: JSON.stringify({ error: err instanceof Error ? err.message : String(err) }),
-    };
+    return json(502, { error: err instanceof Error ? err.message : String(err) });
   }
 };
