@@ -218,18 +218,18 @@ export function resolveWorkspaceApiKeyFromEnv(
   const envKeys = uniqueKeys([...countryScopedKeys, ...deFallbackKeys, ...globalKeys]);
   const localDevKeys = uniqueKeys([...localCountryKeys, ...localFallbackKeys, ...deFallbackKeys]);
 
-  // In production, country env keys take priority. If a country key is missing,
-  // we explicitly default to DE before falling back to global keys.
-  // This keeps cross-country routing deterministic while preserving per-country
-  // overrides when configured.
+  // In production, resolution is server-side first: per-country Netlify env vars
+  // (resolved inside the proxy) take priority, with DE fallback. The manual key
+  // saved in workspace settings is intentionally NOT consulted in production —
+  // secret env vars are redacted from the client bundle, so any client-visible
+  // "env" key here is rare, and a stale/revoked manual key must never override the
+  // server route token. When nothing client-visible matches, we emit a country
+  // route token and let the proxy resolve the real key.
   //
-  // As a safety net, the RFT_LOCAL_* keys are tried before the manual key: when a
-  // country context value is misconfigured (e.g. a masked placeholder pasted into
-  // Production), a valid key set in another context still lets AI features work.
-  // In local dev, keep manual key first for quick testing.
+  // In local dev, keep the manual key first for quick testing without Netlify.
   const keysToCheck = env.DEV
     ? [manual ? '__MANUAL__' : '', ...localDevKeys, ...envKeys]
-    : [...envKeys, ...localDevKeys, manual ? '__MANUAL__' : ''];
+    : [...envKeys, ...localDevKeys];
 
   let matchedType: MatchedKeyType = 'none';
   let matchedKeyName: string | null = null;
