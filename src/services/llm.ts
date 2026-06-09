@@ -133,6 +133,72 @@ async function callOpenAIProxy(
   });
 }
 
+// ── Async image generation (Netlify Background Function + polling) ──────────────
+// gpt-image generation routinely exceeds the 10/26s synchronous function limit,
+// which returns a 504 "Inactivity Timeout". Image jobs are instead submitted to a
+// background function (up to 15 min) that writes the result to Netlify Blobs; the
+// frontend polls a fast status function until the job is done or errors.
+const OPENAI_IMAGE_BACKGROUND_PATH = '/.netlify/functions/openai-image-background';
+const OPENAI_IMAGE_STATUS_PATH = '/.netlify/functions/openai-image-status';
+
+function makeImageJobId(): string {
+  return `img-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+async function generateImageViaBackground(
+  apiKey: string,
+  payload: Record<string, unknown>,
+): Promise<{ imageBase64: string; mimeType: 'image/png' }> {
+  const jobId = makeImageJobId();
+  const submitBody: Record<string, unknown> = { jobId, payload };
+  if (isCountryRouteToken(apiKey)) {
+    submitBody.country = parseCountryRouteToken(apiKey) ?? '';
+  } else {
+    submitBody.apiKey = apiKey;
+  }
+
+  const submit = await fetch(OPENAI_IMAGE_BACKGROUND_PATH, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(submitBody),
+  });
+  // Netlify background functions return 202 Accepted. Anything else means the
+  // function isn't available (e.g. a plan without background functions) or errored.
+  if (submit.status !== 202) {
+    const text = await submit.text().catch(() => '');
+    throw new Error(`图片生成任务提交失败 (${submit.status})。${text.slice(0, 200)}`);
+  }
+
+  const POLL_INTERVAL_MS = 3000;
+  const MAX_WAIT_MS = 5 * 60 * 1000;
+  const deadline = Date.now() + MAX_WAIT_MS;
+
+  // Give the upstream a head start before the first poll.
+  await sleep(2500);
+
+  while (Date.now() < deadline) {
+    let statusRes: Response | null = null;
+    try {
+      statusRes = await fetch(`${OPENAI_IMAGE_STATUS_PATH}?jobId=${encodeURIComponent(jobId)}`);
+    } catch {
+      statusRes = null;
+    }
+    if (statusRes && statusRes.ok) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data: any = await statusRes.json().catch(() => null);
+      if (data?.status === 'done' && typeof data.imageBase64 === 'string' && data.imageBase64) {
+        return { imageBase64: data.imageBase64, mimeType: 'image/png' };
+      }
+      if (data?.status === 'error') {
+        throw new Error(data.error || 'OpenAI 图片生成失败。');
+      }
+      // status === 'pending' → keep polling
+    }
+    await sleep(POLL_INTERVAL_MS);
+  }
+  throw new Error('图片生成超时（超过 5 分钟仍未完成）。请稍后重试。');
+}
+
 async function callOpenAI(
   messages: LLMMessage[],
   model: LLMModel,
@@ -1078,25 +1144,10 @@ export async function generateProductImage(
     }],
   };
 
-  const response = await callOpenAIProxy('/v1/responses', apiKey, body);
-
-  if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`OpenAI Responses API ${response.status}: ${err.slice(0, 400)}`);
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const json: any = await response.json();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const calls: any[] = Array.isArray(json.output) ? json.output : [];
-  const imgCall = calls.find((o) => o?.type === 'image_generation_call');
-  const b64: string | undefined = imgCall?.result;
-
-  if (!b64 || typeof b64 !== 'string') {
-    throw new Error('OpenAI 未返回图片数据。可能原因：参考图被内容审核拦截，或当前账号无 Image 2 可用权限。');
-  }
-
-  return { imageBase64: b64, mimeType: 'image/png' };
+  // Long-running image generation runs on a background function with polling to
+  // avoid the synchronous 10/26s Netlify timeout (504). Key resolution still
+  // happens server-side (per country, DE fallback) inside the background function.
+  return await generateImageViaBackground(apiKey, body);
 }
 
 // ── Shared JSON extractor ─────────────────────────────────────
