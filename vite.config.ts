@@ -3,7 +3,11 @@ import react from '@vitejs/plugin-react'
 import path from 'path'
 
 export default defineConfig({
-  envPrefix: ['VITE_', 'RFT_'],
+  // SECURITY: do NOT expose `RFT_*` env vars to the client bundle. Provider API
+  // keys live in Netlify env vars and are resolved server-side by the
+  // openai-proxy function (per country, with DE fallback). Including `RFT_` here
+  // previously leaked non-secret keys (e.g. RFT_LOCAL_*) into the public JS.
+  envPrefix: ['VITE_'],
   plugins: [react()],
   resolve: {
     alias: {
