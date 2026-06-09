@@ -4,15 +4,18 @@ import { fsUpdateSettings } from '@/services/firestoreService';
 import { INITIAL_SETTINGS } from '@/data/defaults';
 import { coerceLLMModel } from '@/lib/llmModelCoerce';
 import i18n from '@/i18n';
+import { normalizeSystemLanguage, toI18nLanguage } from '@/lib/systemLanguage';
 
 interface SettingsState {
   appSettings: AppSettings;
+  settingsScopeKey: string | null;
 
   /**
    * Called ONLY by the Firestore sync hook to hydrate state from a remote
    * snapshot — does NOT write back to Firestore (avoids echo loop).
    */
   _setSettings: (settings: AppSettings) => void;
+  initSettingsScope: (scopeKey: string | null) => void;
 
   // User-triggered mutations — each writes to Firestore
   setAppSettings:     (settings: Partial<AppSettings>) => void;
@@ -28,35 +31,86 @@ interface SettingsState {
   persistAppSettings: () => Promise<void>;
 }
 
+function normalizeScopeKey(scopeKey: string | null | undefined): string | null {
+  const normalized = (scopeKey ?? '').trim().toUpperCase();
+  return normalized || null;
+}
+
+function settingsCacheKey(scopeKey: string): string {
+  return `rft.settings.${scopeKey}`;
+}
+
+function loadCachedSettings(scopeKey: string): AppSettings | null {
+  try {
+    const raw = localStorage.getItem(settingsCacheKey(scopeKey));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<AppSettings>;
+    return {
+      ...INITIAL_SETTINGS,
+      ...parsed,
+      systemLanguage: normalizeSystemLanguage(parsed.systemLanguage),
+      model: coerceLLMModel(parsed.model),
+    };
+  } catch (err) {
+    console.warn('[Settings] failed to parse scope-scoped cache', err);
+    return null;
+  }
+}
+
+function saveCachedSettings(scopeKey: string | null, settings: AppSettings): void {
+  if (!scopeKey) return;
+  try {
+    localStorage.setItem(settingsCacheKey(scopeKey), JSON.stringify(settings));
+  } catch (err) {
+    console.warn('[Settings] failed to persist scope-scoped cache', err);
+  }
+}
+
 // Helper: merge partial updates, apply to state and persist to Firestore
 function applyAndSync(
   get: () => SettingsState,
   set: (fn: (s: SettingsState) => Partial<SettingsState>) => void,
   partial: Partial<AppSettings>,
 ) {
-  const next: AppSettings = { ...get().appSettings, ...partial };
+  const current = get();
+  const next: AppSettings = { ...current.appSettings, ...partial };
   set(() => ({ appSettings: next }));
+  saveCachedSettings(current.settingsScopeKey, next);
   void fsUpdateSettings(next).catch((e) => console.error('[Firestore] settings', e));
 }
 
 export const useSettingsStore = create<SettingsState>()((set, get) => ({
   appSettings: INITIAL_SETTINGS,
+  settingsScopeKey: null,
 
   // ── Remote sync (no write-back) ──────────────────────────
-  _setSettings: (settings) =>
+  _setSettings: (settings) => {
+    const normalized: AppSettings = {
+      ...INITIAL_SETTINGS,
+      ...settings,
+      systemLanguage: normalizeSystemLanguage(settings.systemLanguage),
+      model: coerceLLMModel(settings.model),
+    };
+    set(() => ({ appSettings: normalized }));
+    saveCachedSettings(get().settingsScopeKey, normalized);
+  },
+
+  initSettingsScope: (scopeKey) => {
+    const normalizedScope = normalizeScopeKey(scopeKey);
+    const cached = normalizedScope ? loadCachedSettings(normalizedScope) : null;
+    const next = cached ?? INITIAL_SETTINGS;
     set(() => ({
-      appSettings: {
-        ...INITIAL_SETTINGS,
-        ...settings,
-        model: coerceLLMModel(settings.model),
-      },
-    })),
+      settingsScopeKey: normalizedScope,
+      appSettings: next,
+    }));
+    i18n.changeLanguage(toI18nLanguage(next.systemLanguage));
+  },
 
   // ── User-triggered mutations ─────────────────────────────
   setAppSettings: (partial) => applyAndSync(get, set, partial),
 
   setSystemLanguage: (lang) => {
-    i18n.changeLanguage(lang);
+    i18n.changeLanguage(toI18nLanguage(lang));
     applyAndSync(get, set, { systemLanguage: lang });
   },
 
@@ -82,6 +136,7 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
       ...(s.tinyfishApiKey.trim() && !s.isTinyfishSaved ? { isTinyfishSaved: true } : {}),
     };
     set(() => ({ appSettings: next }));
+    saveCachedSettings(get().settingsScopeKey, next);
     await fsUpdateSettings(next);
   },
 }));

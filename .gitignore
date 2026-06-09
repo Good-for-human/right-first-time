@@ -21,3 +21,7 @@ Thumbs.db
 
 # Vite / TS cache
 *.tsbuildinfo
+
+# Local Netlify folder
+.netlify
+.gstack/

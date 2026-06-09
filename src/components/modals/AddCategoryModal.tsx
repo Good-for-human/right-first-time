@@ -4,17 +4,23 @@ import { X } from 'lucide-react';
 
 interface AddCategoryModalProps {
   onClose: () => void;
-  onSave: (name: string) => void;
+  onSave: (name: string) => Promise<void> | void;
 }
 
 export function AddCategoryModal({ onClose, onSave }: AddCategoryModalProps) {
   const { t } = useTranslation();
   const [name, setName] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!name.trim()) return;
-    onSave(name.trim());
-    onClose();
+    setIsSaving(true);
+    try {
+      await onSave(name.trim());
+      onClose();
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -33,7 +39,7 @@ export function AddCategoryModal({ onClose, onSave }: AddCategoryModalProps) {
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="..."
-            onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+            onKeyDown={(e) => e.key === 'Enter' && void handleSave()}
             className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-[#0052D9] outline-none shadow-inner"
           />
           <div className="flex justify-end gap-3">
@@ -41,11 +47,11 @@ export function AddCategoryModal({ onClose, onSave }: AddCategoryModalProps) {
               {t('modal.cancel')}
             </button>
             <button
-              onClick={handleSave}
-              disabled={!name.trim()}
+              onClick={() => void handleSave()}
+              disabled={!name.trim() || isSaving}
               className="px-5 py-2 text-sm font-medium text-white bg-[#0052D9] hover:bg-blue-800 rounded-md disabled:opacity-50"
             >
-              {t('modal.save')}
+              {isSaving ? t('global.saving') : t('modal.save')}
             </button>
           </div>
         </div>

@@ -1,9 +1,29 @@
 import type { CountryCode } from '@/types';
 
 type NullableString = string | null | undefined;
-type MatchedKeyType = 'env' | 'manual' | 'none';
+type MatchedKeyType = 'env' | 'manual' | 'route' | 'none';
 
 const KEY_ROUTING_DEBUG_CACHE = new Set<string>();
+
+/**
+ * Sentinel returned to the frontend when no client-visible API key exists.
+ * The same-origin proxy (/.netlify/functions/openai-proxy) interprets this
+ * token, then resolves the real key from server-side env vars by country
+ * (with DE fallback). This keeps provider keys off the browser entirely.
+ *
+ * Format: `__RFT_ROUTE__:<COUNTRY>` (country may be empty → server uses DE/global).
+ */
+export const COUNTRY_ROUTE_PREFIX = '__RFT_ROUTE__:';
+
+export function isCountryRouteToken(value: NullableString): boolean {
+  return typeof value === 'string' && value.startsWith(COUNTRY_ROUTE_PREFIX);
+}
+
+export function parseCountryRouteToken(value: NullableString): string | null {
+  if (!isCountryRouteToken(value)) return null;
+  const country = (value as string).slice(COUNTRY_ROUTE_PREFIX.length).trim().toUpperCase();
+  return country || null;
+}
 
 function normalizeKey(value: NullableString): string {
   const raw = (value ?? '').trim();
@@ -101,6 +121,8 @@ function keySuffix(value: string): string {
 
 function inferCountryFromMatchedKeyName(keyName: string | null): string | null {
   if (!keyName) return null;
+  const routeCountry = parseCountryRouteToken(keyName);
+  if (routeCountry) return routeCountry;
   const match = keyName.match(/(?:_|^)(UK|DE|IT|ES|FR|BE|NL|PL|SE|GLOBAL|BNL)$/);
   return match ? match[1] : null;
 }
@@ -230,11 +252,15 @@ export function resolveWorkspaceApiKeyFromEnv(
   }
 
   if (!resolvedKey) {
-    resolvedKey = manual;
-    if (resolvedKey) {
-      matchedType = 'manual';
-      matchedKeyName = '__MANUAL_FALLBACK__';
-    }
+    // No client-visible key. In production, Netlify marks per-country keys as
+    // secret, which redacts them out of the browser bundle by design. Instead of
+    // returning an empty key (which blocks AI features), emit a country-route
+    // token so the same-origin proxy resolves the real key server-side, using the
+    // workspace country first and DE as fallback.
+    const primaryCountry = countryCandidates[0] ?? '';
+    resolvedKey = `${COUNTRY_ROUTE_PREFIX}${primaryCountry}`;
+    matchedType = 'route';
+    matchedKeyName = resolvedKey;
   }
 
   emitKeyRoutingDebug({

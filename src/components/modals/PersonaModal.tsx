@@ -1,14 +1,18 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X, Sparkles, Loader2 } from 'lucide-react';
-import type { Persona, AppSettings } from '@/types';
+import type { Persona, AppSettings, SystemLanguage } from '@/types';
 import { callLLM } from '@/services/llm';
+import { useAuthStore } from '@/store/authStore';
+import { resolveWorkspaceApiKey } from '@/lib/apiKeyResolver';
+import { localizeSystemText } from '@/lib/systemTextI18n';
 
 interface PersonaModalProps {
   existing?: Persona;
   appSettings?: AppSettings;
+  systemLanguage: SystemLanguage;
   onClose: () => void;
-  onSave: (data: Pick<Persona, 'name' | 'description'>) => void;
+  onSave: (data: Pick<Persona, 'name' | 'description'>) => Promise<void> | void;
 }
 
 const COSMO_SYSTEM_PROMPT = `You are a world-class Amazon listing strategist and prompt engineer.
@@ -22,23 +26,37 @@ Apply these principles:
 5. Specify language register: technical / casual / professional / budget-conscious, etc.
 6. Keep it concise (3-6 sentences). No bullet lists. No preamble. Return ONLY the rewritten description.`;
 
-export function PersonaModal({ existing, appSettings, onClose, onSave }: PersonaModalProps) {
+export function PersonaModal({ existing, appSettings, systemLanguage, onClose, onSave }: PersonaModalProps) {
   const { t } = useTranslation();
-  const [name, setName] = useState(existing?.name ?? '');
-  const [description, setDescription] = useState(existing?.description ?? '');
+  const profile = useAuthStore((s) => s.profile);
+  const effectiveApiKey = resolveWorkspaceApiKey({
+    manualKey: appSettings?.apiKey,
+    countryCode: profile?.countryCode,
+  });
+  const [name, setName] = useState(
+    existing
+      ? localizeSystemText(existing.name, existing.nameI18n, systemLanguage)
+      : '',
+  );
+  const [description, setDescription] = useState(
+    existing
+      ? localizeSystemText(existing.description, existing.descriptionI18n, systemLanguage)
+      : '',
+  );
   const [isOptimizing, setIsOptimizing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [optimizeError, setOptimizeError] = useState('');
 
   const handleOptimize = async () => {
     if (!description.trim()) return;
-    if (!appSettings?.apiKey) {
-      setOptimizeError('请先在「系统设置 → 大模型配置」中填写 API 密钥。');
+    if (!effectiveApiKey) {
+      setOptimizeError(t('ws.apiKeyRequired'));
       return;
     }
     setIsOptimizing(true);
     setOptimizeError('');
     try {
-      const personaName = name.trim() || '用户';
+      const personaName = name.trim() || t('modal.personaDefaultName');
       const userPrompt =
         `Persona name: ${personaName}\n\nCurrent description:\n${description.trim()}\n\n` +
         `Rewrite this description following the COSMO principles. Output only the improved description, nothing else.`;
@@ -48,23 +66,28 @@ export function PersonaModal({ existing, appSettings, onClose, onSave }: Persona
           { role: 'system', content: COSMO_SYSTEM_PROMPT },
           { role: 'user',   content: userPrompt },
         ],
-        appSettings.model,
-        appSettings.apiKey,
+        appSettings?.model ?? 'gpt-5.5',
+        effectiveApiKey,
         { temperature: 0.5, maxTokens: 300 },
       );
       const optimized = result.content.trim();
       if (optimized) setDescription(optimized);
     } catch {
-      setOptimizeError('AI 优化失败，请稍后重试。');
+      setOptimizeError(t('ai.optimizeFailed'));
     } finally {
       setIsOptimizing(false);
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!name.trim() || !description.trim()) return;
-    onSave({ name: name.trim(), description: description.trim() });
-    onClose();
+    setIsSaving(true);
+    try {
+      await onSave({ name: name.trim(), description: description.trim() });
+      onClose();
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -106,7 +129,7 @@ export function PersonaModal({ existing, appSettings, onClose, onSave }: Persona
               rows={5}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="描述这个买家的使用场景、购买动机和搜索偏好…"
+              placeholder={t('modal.personaDescPlaceholder')}
               className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-purple-400 focus:ring-1 focus:ring-purple-400 outline-none resize-none shadow-inner transition-all"
             />
             {optimizeError && (
@@ -122,10 +145,10 @@ export function PersonaModal({ existing, appSettings, onClose, onSave }: Persona
             </button>
             <button
               onClick={handleSave}
-              disabled={!name.trim() || !description.trim() || isOptimizing}
+              disabled={!name.trim() || !description.trim() || isOptimizing || isSaving}
               className="px-5 py-2 text-sm font-medium text-white bg-[#0052D9] hover:bg-blue-800 rounded-md shadow-sm disabled:opacity-50 transition"
             >
-              {t('modal.save')}
+              {isSaving ? t('global.saving') : t('modal.save')}
             </button>
           </div>
         </div>

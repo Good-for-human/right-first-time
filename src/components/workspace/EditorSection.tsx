@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { useRef, useEffect, useMemo, useState } from 'react';
 import { diffCurrentAgainstBaseline } from '@/lib/textDiff';
-import { Check, AlertTriangle, RefreshCw, Globe, Languages, Info, Loader2, Wand2, Eye, Pencil } from 'lucide-react';
+import { Check, AlertTriangle, RefreshCw, Globe, Languages, Info, Loader2, Wand2, Eye, Pencil, Copy } from 'lucide-react';
 import { Badge } from '@/components/ui';
 import type { ContentKey, SectionMetadata, TranslationMap, LanguageCode } from '@/types';
 import { LANGUAGES } from '@/constants';
@@ -11,6 +11,16 @@ function isHtmlContent(text: string): boolean {
   return /<[a-zA-Z][^>]*>/.test(text);
 }
 
+/** Render HTML-like text as plain readable content. */
+function htmlToPlainText(text: string): string {
+  return text
+    .replace(/<\s*br\s*\/?>/gi, '\n')
+    .replace(/<\s*\/\s*(p|div|h1|h2|h3|h4|h5|h6|li)\s*>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 interface EditorSectionProps {
   title: string;
   dataKey: ContentKey;
@@ -18,8 +28,8 @@ interface EditorSectionProps {
   value: string;
   translationMap: TranslationMap;
   targetLanguage: LanguageCode;
-  translationLang: 'en' | 'zh';
-  systemLanguage: 'zh' | 'en';
+  translationLang: LanguageCode;
+  systemLanguage: 'cn' | 'en';
   isArchived: boolean;
   isRegenerating: boolean;
   translationLoading?: boolean;
@@ -33,6 +43,8 @@ interface EditorSectionProps {
   onRegenerate: (key: ContentKey) => void;
   /** Trigger translation for this section only */
   onTranslate?: () => void;
+  onCopySection?: (key: ContentKey) => void;
+  isCopyingSection?: boolean;
 }
 
 export function EditorSection({
@@ -53,12 +65,17 @@ export function EditorSection({
   onChange,
   onRegenerate,
   onTranslate,
+  onCopySection,
+  isCopyingSection = false,
 }: EditorSectionProps) {
   const { t } = useTranslation();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [previewMode, setPreviewMode] = useState(false);
 
   const hasHtml = isHtmlContent(value);
+  const isDescription = dataKey === 'description';
+  const supportsPreview = hasHtml && !isDescription;
+  const displayValue = isDescription ? htmlToPlainText(value) : value;
 
   // Auto-grow textarea to fit content, capped at 360px
   useEffect(() => {
@@ -70,21 +87,23 @@ export function EditorSection({
   }, [value, previewMode]);
 
   const targetLangObj = LANGUAGES.find((l) => l.code === targetLanguage);
-  const targetLangLabel = systemLanguage === 'zh' ? targetLangObj?.zhLabel : targetLangObj?.label;
+  const targetLangLabel = systemLanguage === 'cn' ? targetLangObj?.zhLabel : targetLangObj?.label;
 
   const translationLangObj = LANGUAGES.find((l) => l.code === translationLang);
-  const translationLangLabel = systemLanguage === 'zh' ? translationLangObj?.zhLabel : translationLangObj?.label;
+  const translationLangLabel = systemLanguage === 'cn' ? translationLangObj?.zhLabel : translationLangObj?.label;
 
-  const translationContent =
-    translationMap[dataKey]?.[translationLang] ??
-    translationMap[dataKey]?.['en'] ??
-    null;
+  // Show the translation for the exact selected language only. Falling back to another
+  // language would mislabel content (e.g. show English under a "German" header).
+  const translationContent = translationMap[dataKey]?.[translationLang] ?? null;
 
   const diffParts = useMemo(
-    () => diffCurrentAgainstBaseline(baselineValue, value),
-    [baselineValue, value],
+    () => diffCurrentAgainstBaseline(
+      isDescription ? htmlToPlainText(baselineValue) : baselineValue,
+      displayValue,
+    ),
+    [baselineValue, displayValue, isDescription],
   );
-  const showBaselineDiff = baselineValue.trim() !== value.trim();
+  const showBaselineDiff = (isDescription ? htmlToPlainText(baselineValue) : baselineValue).trim() !== displayValue.trim();
 
   return (
     <div className="mb-6 bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden group flex flex-col">
@@ -94,26 +113,38 @@ export function EditorSection({
         <div className="flex items-center gap-3">
           <h3 className="font-semibold text-slate-800 text-[13px]">{title}</h3>
           {metadata.negativeCheck.passed ? (
-            <Badge color="green"><Check size={10} className="mr-1 inline" />Pass</Badge>
+            <Badge color="green"><Check size={10} className="mr-1 inline" />{t('editor.pass')}</Badge>
           ) : (
-            <Badge color="orange"><AlertTriangle size={10} className="mr-1 inline" />Flagged</Badge>
+            <Badge color="orange"><AlertTriangle size={10} className="mr-1 inline" />{t('editor.flagged')}</Badge>
           )}
           {isModified && (
             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-700 border border-emerald-200">
-              已修改
+              {t('editor.modified')}
             </span>
           )}
         </div>
-        {!isArchived && (
-          <button
-            onClick={() => onRegenerate(dataKey)}
-            disabled={isRegenerating}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 text-slate-600 hover:text-[#0052D9] hover:border-blue-200 rounded-md text-xs font-medium transition shadow-sm disabled:opacity-50"
-          >
-            <RefreshCw size={12} className={isRegenerating ? 'animate-spin text-[#0052D9]' : ''} />
-            {isRegenerating ? t('btn.regenerating') : t('btn.regenerate')}
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {!isArchived && (
+            <button
+              onClick={() => onRegenerate(dataKey)}
+              disabled={isRegenerating}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 text-slate-600 hover:text-[#0052D9] hover:border-blue-200 rounded-md text-xs font-medium transition shadow-sm disabled:opacity-50"
+            >
+              <RefreshCw size={12} className={isRegenerating ? 'animate-spin text-[#0052D9]' : ''} />
+              {isRegenerating ? t('btn.regenerating') : t('btn.regenerate')}
+            </button>
+          )}
+          {onCopySection && (
+            <button
+              onClick={() => onCopySection(dataKey)}
+              disabled={isCopyingSection}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-blue-200 text-blue-700 hover:bg-blue-50 rounded-md text-xs font-medium transition shadow-sm disabled:opacity-50"
+            >
+              {isCopyingSection ? <Loader2 size={12} className="animate-spin" /> : <Copy size={12} />}
+              {t('ws.copySection')}
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-2 divide-x divide-slate-100 flex-1">
@@ -123,7 +154,7 @@ export function EditorSection({
             <span className="text-[11px] font-semibold text-[#0052D9] flex items-center gap-1.5 tracking-wider">
               <Globe size={12} /> {targetLangLabel}
             </span>
-            {hasHtml && (
+            {supportsPreview && (
               <button
                 onClick={() => setPreviewMode((p) => !p)}
                 className="flex items-center gap-1 px-2 py-1 text-[10px] font-semibold text-slate-500 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded transition"
@@ -154,7 +185,7 @@ export function EditorSection({
                   ? 'border-2 border-emerald-400 bg-emerald-50/30 text-slate-800 focus:ring-2 focus:ring-emerald-100 focus:border-emerald-500'
                   : 'border border-slate-200 bg-slate-50/30 text-slate-800 focus:ring-2 focus:ring-blue-100 focus:border-[#0052D9]'
               }`}
-              value={value}
+              value={displayValue}
               onChange={(e) => onChange(e.target.value)}
               disabled={isArchived || isRegenerating}
             />
@@ -167,8 +198,8 @@ export function EditorSection({
                   {t('ws.diffFromBaseline')}
                 </p>
                 <span className="inline-flex items-center gap-1 text-[10px] text-slate-500">
-                  <span className="inline-block w-2 h-2 rounded-sm bg-emerald-300" /> 新增/替换
-                  <span className="inline-block w-2 h-2 rounded-sm bg-rose-200 ml-1.5" /> 原文删除
+                  <span className="inline-block w-2 h-2 rounded-sm bg-emerald-300" /> {t('editor.diffAdded')}
+                  <span className="inline-block w-2 h-2 rounded-sm bg-rose-200 ml-1.5" /> {t('editor.diffRemoved')}
                 </span>
               </div>
               <div className="text-xs text-slate-800 whitespace-pre-wrap leading-relaxed max-h-[220px] overflow-y-auto">
@@ -204,7 +235,7 @@ export function EditorSection({
               <p className="text-[11px] text-slate-600 mb-1.5 leading-relaxed">{metadata.explanation}</p>
               <div className="flex flex-wrap gap-1">
                 {metadata.rulesApplied.map((rule, idx) => {
-                  const isPersona = rule.includes('[画像]') || rule.includes('[Persona]');
+                  const isPersona = rule.includes('[Persona]');
                   return (
                     <span
                       key={idx}
@@ -244,25 +275,25 @@ export function EditorSection({
             )}
           </div>
           {translationContent ? (
-            isHtmlContent(translationContent) ? (
+            (isHtmlContent(translationContent) && !isDescription) ? (
               <div
                 className="rendered-html w-full text-sm p-3 border border-slate-100 rounded-lg bg-white text-slate-600 min-h-[100px] leading-relaxed shadow-sm break-words"
                 dangerouslySetInnerHTML={{ __html: translationContent }}
               />
             ) : (
               <div className="w-full text-sm p-3 border border-slate-100 rounded-lg bg-white text-slate-600 min-h-[100px] leading-relaxed shadow-sm break-words whitespace-pre-wrap">
-                {translationContent}
+                {isDescription ? htmlToPlainText(translationContent) : translationContent}
               </div>
             )
           ) : (sectionTranslateLoading || translationLoading) ? (
             <div className="flex flex-col items-center justify-center min-h-[100px] border border-dashed border-indigo-200 rounded-lg bg-indigo-50/30 text-indigo-400 gap-2">
               <Loader2 size={18} className="animate-spin" />
-              <p className="text-xs">翻译中...</p>
+              <p className="text-xs">{t('editor.translating')}</p>
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center min-h-[100px] border border-dashed border-slate-200 rounded-lg bg-slate-50/50 text-slate-400 gap-2 text-center px-4">
               <Languages size={18} className="opacity-40" />
-              <p className="text-xs">点击右上角「翻译」按钮生成{translationLangLabel}翻译</p>
+              <p className="text-xs">{t('editor.translateHint', { lang: translationLangLabel })}</p>
             </div>
           )}
         </div>

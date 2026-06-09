@@ -1,4 +1,5 @@
 import type { ContentKey, LLMMessage, LLMModel, LLMResponse } from '@/types';
+import { isCountryRouteToken, parseCountryRouteToken } from '@/lib/apiKeyResolver';
 
 // ── Provider routing ──────────────────────────────────────────
 
@@ -115,14 +116,20 @@ async function callOpenAIProxy(
   apiKey: string,
   payload: Record<string, unknown>,
 ): Promise<Response> {
+  // When the frontend has no client-visible key it passes a country-route token.
+  // In that case we send only the country so the proxy resolves the real key from
+  // server-side env vars (per country, DE fallback). The provider key never leaves
+  // the server. A real key (manual override) is forwarded as-is.
+  const body: Record<string, unknown> = { endpoint, payload };
+  if (isCountryRouteToken(apiKey)) {
+    body.country = parseCountryRouteToken(apiKey) ?? '';
+  } else {
+    body.apiKey = apiKey;
+  }
   return fetch(OPENAI_PROXY_PATH, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      endpoint,
-      apiKey,
-      payload,
-    }),
+    body: JSON.stringify(body),
   });
 }
 
@@ -919,7 +926,7 @@ export async function generateProductImage(
   if (refs.length === 0) {
     throw new Error('至少需要 1 张产品参考图（http/https URL）才能进行图生图。');
   }
-  if (!apiKey || !apiKey.startsWith('sk-')) {
+  if (!apiKey || (!apiKey.startsWith('sk-') && !isCountryRouteToken(apiKey))) {
     throw new Error('Image 2 生图需要 OpenAI API 密钥（sk- 开头）。');
   }
 

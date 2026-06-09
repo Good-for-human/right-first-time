@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { LucideIcon } from 'lucide-react';
 import { CheckCircle, X, Star } from 'lucide-react';
 import type { Task, ViewMode } from '@/types';
@@ -34,7 +35,9 @@ function TaskItem({
   onDelete: () => void;
   onToggleBenchmark: (value: boolean) => void;
 }) {
+  const { t } = useTranslation();
   const [confirming, setConfirming] = useState(false);
+  const modelDisplay = task.modelKey?.trim() || task.name || task.asin;
 
   // ── Confirmation state ──────────────────────────────────────
   if (confirming) {
@@ -44,19 +47,21 @@ function TaskItem({
           isActive ? 'bg-blue-50/70 border-blue-100' : 'bg-red-50/60 border-red-100'
         }`}
       >
-        <span className="text-slate-600 truncate leading-tight">删除 <strong>{task.name || task.asin}</strong>？</span>
+        <span className="text-slate-600 truncate leading-tight">
+          {t('sidebar.deleteTaskConfirm', { name: modelDisplay })}
+        </span>
         <div className="flex items-center gap-1 shrink-0">
           <button
             onClick={(e) => { e.stopPropagation(); setConfirming(false); }}
             className="px-2 py-0.5 rounded text-slate-500 hover:bg-slate-200 transition font-medium"
           >
-            取消
+            {t('sidebar.cancel')}
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); onDelete(); }}
             className="px-2 py-0.5 rounded bg-red-500 text-white hover:bg-red-600 transition font-medium"
           >
-            删除
+            {t('sidebar.delete')}
           </button>
         </div>
       </div>
@@ -83,9 +88,9 @@ function TaskItem({
               {task.isBenchmark && (
                 <Star size={10} className="text-amber-400 fill-amber-400 shrink-0" />
               )}
-              {task.name || task.asin}
+              {modelDisplay}
             </div>
-            {task.name && (
+            {modelDisplay !== task.asin && (
               <div className={`text-xs truncate mt-0.5 ${isActive ? 'text-blue-500/80' : 'text-slate-400'}`}>
                 {task.asin}
               </div>
@@ -97,7 +102,7 @@ function TaskItem({
       {/* Benchmark star — always visible if active, otherwise on hover */}
       <button
         onClick={(e) => { e.stopPropagation(); onToggleBenchmark(!task.isBenchmark); }}
-        title={task.isBenchmark ? '取消标杆' : '设为标杆（AI重写时作为参考）'}
+        title={task.isBenchmark ? t('sidebar.benchmarkOn') : t('sidebar.benchmarkOff')}
         className={`absolute right-7 top-1/2 -translate-y-1/2 w-5 h-5 rounded flex items-center justify-center transition-all ${
           task.isBenchmark
             ? 'text-amber-400 opacity-100'
@@ -110,7 +115,7 @@ function TaskItem({
       {/* Delete × button — visible on row hover */}
       <button
         onClick={(e) => { e.stopPropagation(); setConfirming(true); }}
-        title="删除任务"
+        title={t('sidebar.deleteTask')}
         className="absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 rounded flex items-center justify-center
           text-slate-300 hover:text-red-500 hover:bg-red-50
           opacity-0 group-hover/item:opacity-100 transition-all"

@@ -46,6 +46,21 @@ const MOCK_TRANSLATIONS: Record<LanguageCode, GeneratedContent> = {
     bullets: '• WIFI 6 ULTRARRÁPIDO: Velocidades de doble banda de hasta 5400 Mbps para streaming 8K sin interrupciones.\n• CONECTA 200+ DISPOSITIVOS: MU-MIMO y OFDMA minimizan la congestión de la red.\n• COBERTURA EXTENSA: 6 antenas de alto rendimiento con Beamforming garantizan conexiones estables.',
     description: 'El TP-Link Archer AX73 es un router WiFi 6 AX5400 de doble banda diseñado para redes domésticas exigentes. Compatible con TP-Link OneMesh.',
   },
+  nl: {
+    title: 'TP-Link Archer AX73 AX5400 Dual-band Gigabit WiFi 6-router, groot bereik, OneMesh- en Alexa-compatibel',
+    bullets: '• ULTRASNELLE WIFI 6: Dual-band snelheden tot 5400 Mbps (4804 Mbps op 5 GHz + 574 Mbps op 2,4 GHz) voor vloeiende 8K-streaming.\n• VERBIND 200+ APPARATEN: MU-MIMO- en OFDMA-technologie verminderen netwerkcongestie.\n• UITGEBREIDE DEKKING: 6 krachtige antennes met Beamforming zorgen voor stabiele verbindingen in het hele huis.',
+    description: 'De TP-Link Archer AX73 is een krachtige AX5400 dual-band WiFi 6-router voor veeleisende thuisnetwerken. Met MU-MIMO en OFDMA ondersteunt hij meer dan 200 gelijktijdige verbindingen en is hij compatibel met TP-Link OneMesh.',
+  },
+  pl: {
+    title: 'Router TP-Link Archer AX73 AX5400, dwupasmowy gigabitowy WiFi 6, szeroki zasięg, zgodny z OneMesh i Alexa',
+    bullets: '• ULTRASZYBKIE WIFI 6: Prędkości dwupasmowe do 5400 Mb/s (4804 Mb/s w 5 GHz + 574 Mb/s w 2,4 GHz) dla płynnego streamingu 8K.\n• PODŁĄCZ PONAD 200 URZĄDZEŃ: Technologie MU-MIMO i OFDMA minimalizują przeciążenie sieci.\n• SZEROKI ZASIĘG: 6 wydajnych anten z Beamforming zapewnia stabilne połączenia w całym domu.',
+    description: 'TP-Link Archer AX73 to wydajny router WiFi 6 AX5400 stworzony do wymagających sieci domowych. Dzięki MU-MIMO i OFDMA obsługuje ponad 200 jednoczesnych połączeń i współpracuje z TP-Link OneMesh.',
+  },
+  sv: {
+    title: 'TP-Link Archer AX73 AX5400 dual-band gigabit WiFi 6-router, lång räckvidd, kompatibel med OneMesh och Alexa',
+    bullets: '• ULTRASNABBT WIFI 6: Dual-band-hastigheter upp till 5400 Mbps (4804 Mbps på 5 GHz + 574 Mbps på 2,4 GHz) för smidig 8K-streaming.\n• ANSLUT 200+ ENHETER: MU-MIMO- och OFDMA-teknik minskar nätverksbelastning.\n• STOR TÄCKNING: 6 högpresterande antenner med Beamforming ger stabil anslutning i hela hemmet.',
+    description: 'TP-Link Archer AX73 är en kraftfull AX5400 dual-band WiFi 6-router för krävande hemnätverk. Med MU-MIMO och OFDMA stöder den över 200 samtidiga anslutningar och är kompatibel med TP-Link OneMesh.',
+  },
   zh: {
     title: 'TP-Link Archer AX73 AX5400 双频千兆 WiFi 6 路由器，广覆盖，支持 OneMesh 与 Alexa',
     bullets: '• 极速 WIFI 6: 双频速度高达 5400 Mbps（5 GHz 上 4804 Mbps + 2.4 GHz 上 574 Mbps），实现无缝 8K 流媒体播放。\n• 连接200+设备: MU-MIMO 和 OFDMA 技术可大幅减少网络拥塞。\n• 广阔覆盖范围: 6 根高性能天线配备波束成形技术，确保整个大户型的稳定连接。',

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Search, Plus, LayoutDashboard, Archive, Settings, ChevronLeft, ChevronRight, LogOut } from 'lucide-react';
+import { Search, Plus, LayoutDashboard, Archive, Settings, ChevronLeft, ChevronRight, LogOut, Library, BookOpenText } from 'lucide-react';
 import { signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { useAuthStore } from '@/store/authStore';
@@ -14,17 +14,30 @@ interface SidebarProps {
   setActiveTaskId: (id: string) => void;
   setView: (view: ViewMode) => void;
   onNewTask: () => void;
+  onOpenGuide: () => void;
   onDeleteTask: (id: string) => void;
   onToggleBenchmark: (id: string, value: boolean) => void;
 }
 
-export function Sidebar({ tasks, activeTaskId, view, setActiveTaskId, setView, onNewTask, onDeleteTask, onToggleBenchmark }: SidebarProps) {
+export function Sidebar({
+  tasks,
+  activeTaskId,
+  view,
+  setActiveTaskId,
+  setView,
+  onNewTask,
+  onOpenGuide,
+  onDeleteTask,
+  onToggleBenchmark,
+}: SidebarProps) {
   const { t } = useTranslation();
   const [searchTerm, setSearchTerm] = useState('');
   const [collapsed, setCollapsed] = useState(false);
   const user = useAuthStore((s) => s.user);
+  const profile = useAuthStore((s) => s.profile);
 
   const filterBySearch = (task: Task) =>
+    (task.modelKey && task.modelKey.toLowerCase().includes(searchTerm.toLowerCase())) ||
     task.asin.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (task.name && task.name.toLowerCase().includes(searchTerm.toLowerCase()));
 
@@ -62,7 +75,7 @@ export function Sidebar({ tasks, activeTaskId, view, setActiveTaskId, setView, o
           {tasks.filter((t) => ['pending', 'fetched', 'review'].includes(t.status)).map((task) => (
             <button
               key={task.id}
-              title={task.name || task.asin}
+              title={task.modelKey || task.name || task.asin}
               onClick={() => { setActiveTaskId(task.id); setView('workspace'); }}
               className={`w-9 h-9 rounded-lg flex items-center justify-center text-[10px] font-bold transition border ${
                 view === 'workspace' && activeTaskId === task.id
@@ -76,7 +89,7 @@ export function Sidebar({ tasks, activeTaskId, view, setActiveTaskId, setView, o
           {tasks.filter((t) => t.status === 'archived').map((task) => (
             <button
               key={task.id}
-              title={task.name || task.asin}
+              title={task.modelKey || task.name || task.asin}
               onClick={() => { setActiveTaskId(task.id); setView('workspace'); }}
               className={`w-9 h-9 rounded-lg flex items-center justify-center transition border ${
                 view === 'workspace' && activeTaskId === task.id
@@ -91,6 +104,24 @@ export function Sidebar({ tasks, activeTaskId, view, setActiveTaskId, setView, o
 
         {/* Settings icon */}
         <div className="px-2 py-3 border-t border-slate-100 bg-slate-50 flex flex-col items-center gap-2 shrink-0">
+          <button
+            title={t('sidebar.guide')}
+            onClick={onOpenGuide}
+            className="w-9 h-9 rounded-lg flex items-center justify-center transition border border-transparent text-slate-500 hover:bg-white hover:border-slate-200 hover:shadow-sm"
+          >
+            <BookOpenText size={16} />
+          </button>
+          <button
+            title={t('sidebar.sharedLibrary')}
+            onClick={() => setView('sharedLibrary')}
+            className={`w-9 h-9 rounded-lg flex items-center justify-center transition border ${
+              view === 'sharedLibrary'
+                ? 'bg-blue-100 border-blue-200 text-[#0052D9]'
+                : 'border-transparent text-slate-500 hover:bg-white hover:border-slate-200 hover:shadow-sm'
+            }`}
+          >
+            <Library size={16} />
+          </button>
           <button
             title={t('sidebar.settings')}
             onClick={() => setView('rules')}
@@ -107,7 +138,7 @@ export function Sidebar({ tasks, activeTaskId, view, setActiveTaskId, setView, o
         {/* Expand toggle */}
         <button
           onClick={() => setCollapsed(false)}
-          title="展开侧边栏"
+          title={t('sidebar.expand')}
           className="absolute -right-3 top-[72px] w-6 h-6 bg-white border border-slate-200 rounded-full shadow-sm flex items-center justify-center text-slate-400 hover:text-[#0052D9] hover:border-blue-300 transition z-30"
         >
           <ChevronRight size={12} />
@@ -127,7 +158,7 @@ export function Sidebar({ tasks, activeTaskId, view, setActiveTaskId, setView, o
         </h1>
         <button
           onClick={() => setCollapsed(true)}
-          title="收起侧边栏"
+          title={t('sidebar.collapse')}
           className="w-6 h-6 rounded-md flex items-center justify-center text-slate-300 hover:text-slate-500 hover:bg-slate-100 transition shrink-0"
         >
           <ChevronLeft size={14} />
@@ -194,6 +225,24 @@ export function Sidebar({ tasks, activeTaskId, view, setActiveTaskId, setView, o
       {/* Settings nav + user info */}
       <div className="p-3 border-t border-slate-100 bg-slate-50 shrink-0 space-y-1">
         <button
+          onClick={onOpenGuide}
+          className="w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition flex items-center gap-2.5 text-slate-600 hover:bg-white hover:shadow-sm border border-transparent"
+        >
+          <BookOpenText size={16} />
+          {t('sidebar.guide')}
+        </button>
+        <button
+          onClick={() => setView('sharedLibrary')}
+          className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition flex items-center gap-2.5 ${
+            view === 'sharedLibrary'
+              ? 'bg-blue-100 text-[#0052D9]'
+              : 'text-slate-600 hover:bg-white hover:shadow-sm border border-transparent'
+          }`}
+        >
+          <Library size={16} />
+          {t('sidebar.sharedLibrary')}
+        </button>
+        <button
           onClick={() => setView('rules')}
           className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition flex items-center gap-2.5 ${
             view === 'rules'
@@ -212,10 +261,17 @@ export function Sidebar({ tasks, activeTaskId, view, setActiveTaskId, setView, o
               <p className="text-[11px] text-slate-400 truncate" title={user.email ?? ''}>
                 {user.email}
               </p>
+              {profile && (
+                <p className="text-[10px] text-slate-400 mt-0.5 truncate">
+                  {profile.role === 'admin'
+                    ? t('sidebar.roleAdmin')
+                    : t('sidebar.roleCountry', { country: profile.countryCode })}
+                </p>
+              )}
             </div>
             <button
               onClick={() => signOut(auth)}
-              title="退出登录"
+              title={t('sidebar.signOut')}
               className="shrink-0 w-6 h-6 flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 rounded transition"
             >
               <LogOut size={13} />

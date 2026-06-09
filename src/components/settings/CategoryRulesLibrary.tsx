@@ -1,11 +1,24 @@
-import { useState, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FileText, Plus, Edit3, Trash2, ShieldAlert, List, Archive, X, KeyRound, Tag, Bookmark } from 'lucide-react';
 import { Badge } from '@/components/ui';
-import type { Rule, Task, KeywordSet } from '@/types';
+import type {
+  Rule,
+  Task,
+  KeywordSet,
+  SystemLanguage,
+  CategoryLabelMap,
+  BusinessCountryCode,
+  CountryCode,
+  SharedKeywordLibraryItem,
+} from '@/types';
+import { isGlobalCategory, localizeSystemText } from '@/lib/systemTextI18n';
+import { DEFAULT_CATEGORY } from '@/lib/categoryTaxonomy';
 
 interface CategoryRulesLibraryProps {
+  systemLanguage: SystemLanguage;
   categories: string[];
+  categoryLabels: CategoryLabelMap;
   rules: Rule[];
   archivedTasks: Task[];
   onAddCategory: () => void;
@@ -16,6 +29,7 @@ interface CategoryRulesLibraryProps {
   onDeleteRule: (rule: Rule) => void;
   /** Current keyword map (all categories) */
   keywords?: Record<string, KeywordSet>;
+  sharedKeywordLibrary?: Partial<Record<CountryCode, SharedKeywordLibraryItem>>;
   /** Persist updated keyword set for a category */
   onSetKeywords?: (category: string, set: KeywordSet) => void;
   /** Category-level reference ASINs map */
@@ -24,10 +38,13 @@ interface CategoryRulesLibraryProps {
   onAddCategoryRefAsin?: (category: string, asin: string) => void;
   /** Remove a reference ASIN from a category */
   onRemoveCategoryRefAsin?: (category: string, asin: string) => void;
+  localCountryCode?: BusinessCountryCode | null;
 }
 
 export function CategoryRulesLibrary({
+  systemLanguage,
   categories,
+  categoryLabels,
   rules,
   onAddCategory,
   onDeleteCategory,
@@ -39,15 +56,44 @@ export function CategoryRulesLibrary({
   categoryRefAsins = {},
   onAddCategoryRefAsin,
   onRemoveCategoryRefAsin,
+  localCountryCode,
 }: CategoryRulesLibraryProps) {
   const { t } = useTranslation();
-  const [activeCategory, setActiveCategory] = useState(categories[0] ?? '通用');
+  const GLOBAL_CATEGORY_TAB = 'general';
+  const categoryTabs = categories.reduce<string[]>((acc, category) => {
+    const normalized = isGlobalCategory(category) ? GLOBAL_CATEGORY_TAB : category;
+    if (!acc.includes(normalized)) acc.push(normalized);
+    return acc;
+  }, []);
+  if (!categoryTabs.some((category) => isGlobalCategory(category))) {
+    categoryTabs.unshift(GLOBAL_CATEGORY_TAB);
+  }
+  const [activeCategory, setActiveCategory] = useState(
+    categoryTabs[0] ?? DEFAULT_CATEGORY,
+  );
+
+  useEffect(() => {
+    if (categoryTabs.length === 0) return;
+    if (!categoryTabs.includes(activeCategory)) {
+      setActiveCategory(categoryTabs[0]);
+    }
+  }, [activeCategory, categoryTabs]);
+
+  const getRuleCountry = (rule: Rule): string => rule.createdByCountry ?? localCountryCode ?? 'GLOBAL';
+  // Local-only library: a country workspace manages only its own rules / keywords / reference
+  // ASINs. GLOBAL and other countries' items are browsed and imported via the Shared Library,
+  // at which point they become local (editable) copies.
+  const activeSourceCountry: CountryCode = (localCountryCode ?? 'GLOBAL') as CountryCode;
+  const effectiveKeywords = keywords;
+  const effectiveCategoryRefAsins = categoryRefAsins;
+  const canEditSourceContent = true;
 
   // reference ASIN local state
   const refAsinInputRef = useRef<HTMLInputElement>(null);
-  const activeRefAsins = categoryRefAsins[activeCategory] ?? [];
+  const activeRefAsins = effectiveCategoryRefAsins[activeCategory] ?? [];
 
   const handleAddRefAsin = () => {
+    if (!canEditSourceContent) return;
     const val = (refAsinInputRef.current?.value ?? '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
     if (val && activeRefAsins.length < 3 && !activeRefAsins.includes(val)) {
       onAddCategoryRefAsin?.(activeCategory, val);
@@ -56,7 +102,7 @@ export function CategoryRulesLibrary({
   };
 
   // keyword library local state
-  const kwSet = keywords[activeCategory] ?? { primary: '', secondary: [] };
+  const kwSet = effectiveKeywords[activeCategory] ?? { primary: '', secondary: [] };
   const [kwPrimary, setKwPrimary] = useState('');
   const [kwSecInput, setKwSecInput] = useState('');
 
@@ -67,6 +113,7 @@ export function CategoryRulesLibrary({
   };
 
   const saveKeywords = (updated: KeywordSet) => {
+    if (!canEditSourceContent) return;
     onSetKeywords?.(activeCategory, updated);
   };
 
@@ -78,6 +125,7 @@ export function CategoryRulesLibrary({
   };
 
   const handleAddSecondary = () => {
+    if (!canEditSourceContent) return;
     const trimmed = kwSecInput.trim();
     if (!trimmed || kwSet.secondary.includes(trimmed)) { setKwSecInput(''); return; }
     const updated = { ...kwSet, secondary: [...kwSet.secondary, trimmed] };
@@ -86,13 +134,44 @@ export function CategoryRulesLibrary({
   };
 
   const handleRemoveSecondary = (kw: string) => {
+    if (!canEditSourceContent) return;
     saveKeywords({ ...kwSet, secondary: kwSet.secondary.filter((k) => k !== kw) });
   };
 
   // sync local primary input when active category changes
   // (we do this via key on the input so it re-mounts)
 
-  const filteredRules = rules.filter((r) => r.category === activeCategory);
+  const isLocalRule = (rule: Rule): boolean => {
+    if (!localCountryCode) return true;
+    return getRuleCountry(rule) === localCountryCode;
+  };
+  const canEditRule = (rule: Rule): boolean => {
+    if (!localCountryCode) return true;
+    return getRuleCountry(rule) === localCountryCode;
+  };
+  const countryPriority = (rule: Rule): number => {
+    const country = getRuleCountry(rule);
+    if (!localCountryCode) return 0;
+    if (country === localCountryCode) return 0;
+    if (country === 'GLOBAL') return 1;
+    return 2;
+  };
+
+  const filteredRules = rules
+    .filter((r) => isLocalRule(r))
+    .filter((r) =>
+    isGlobalCategory(activeCategory)
+      ? isGlobalCategory(r.category)
+      : r.category === activeCategory,
+    )
+    .sort((a, b) => {
+      const pa = countryPriority(a);
+      const pb = countryPriority(b);
+      if (pa !== pb) return pa - pb;
+      const ta = a.updatedAt ?? a.createdAt ?? '';
+      const tb = b.updatedAt ?? b.createdAt ?? '';
+      return tb.localeCompare(ta);
+    });
   const instructionRules = filteredRules.filter((r) => r.type === 'instruction');
   const negativeRules = filteredRules.filter((r) => r.type === 'negative');
 
@@ -103,6 +182,31 @@ export function CategoryRulesLibrary({
       case 'description': return t('section.desc');
       default: return t('modal.scopeAll');
     }
+  };
+
+  const displayCategoryName = (category: string): string => {
+    if (isGlobalCategory(category)) {
+      return systemLanguage === 'cn' ? '通用' : 'general';
+    }
+    if (systemLanguage === 'cn' && category === 'smart home IoT') {
+      return '智能电子';
+    }
+    return categoryLabels[category]?.[systemLanguage] || category;
+  };
+
+  const renderCreator = (createdByEmail?: string, createdByCountry?: string) => {
+    if (!createdByEmail && !createdByCountry) return null;
+    const isDefault = createdByEmail === 'system@rightfirsttime.local' && createdByCountry === 'GLOBAL';
+    return (
+      <p className="text-[11px] text-slate-400">
+        {isDefault
+          ? t('meta.default')
+          : t('meta.createdBy', {
+              email: createdByEmail ?? '-',
+              country: createdByCountry ?? '-',
+            })}
+      </p>
+    );
   };
 
   return (
@@ -117,7 +221,7 @@ export function CategoryRulesLibrary({
       <div className="p-6">
         {/* Category tabs */}
         <div className="flex flex-wrap gap-2 mb-8 border-b border-slate-200 pb-px items-center">
-          {categories.map((cat) => (
+          {categoryTabs.map((cat) => (
             <div key={cat} className="relative group flex items-center">
               <button
                 onClick={() => handleActiveCategoryChange(cat)}
@@ -127,9 +231,9 @@ export function CategoryRulesLibrary({
                     : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
                 }`}
               >
-                {cat}
+                {displayCategoryName(cat)}
               </button>
-              {cat !== '通用' && activeCategory === cat && (
+              {!isGlobalCategory(cat) && activeCategory === cat && (
                 <button
                   onClick={() => onDeleteCategory(cat)}
                   className="absolute right-0 top-1.5 p-1 text-slate-300 hover:text-red-500 bg-white rounded-full shadow-sm border border-slate-100"
@@ -156,7 +260,7 @@ export function CategoryRulesLibrary({
               </h4>
               <button
                 onClick={() => onAddRule('instruction', activeCategory)}
-                className="text-[#0052D9] text-xs font-semibold hover:bg-blue-100 transition flex items-center gap-1 bg-blue-50 px-2.5 py-1.5 rounded-md"
+                className="text-[#0052D9] text-xs font-semibold hover:bg-blue-100 transition flex items-center gap-1 bg-blue-50 px-2.5 py-1.5 rounded-md disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <Plus size={14} /> {t('modal.add')}
               </button>
@@ -176,8 +280,14 @@ export function CategoryRulesLibrary({
                     <div className="flex items-start gap-3 flex-1">
                       <div className="w-2 h-2 rounded-full bg-[#0052D9] mt-1.5 shrink-0" />
                       <div className="space-y-1.5 w-full">
-                        <span className="text-sm font-medium text-slate-800 block">{rule.name}</span>
+                        <span className="text-sm font-medium text-slate-800 block">
+                          {localizeSystemText(rule.name, rule.nameI18n, systemLanguage)}
+                        </span>
+                        {renderCreator(rule.createdByEmail, rule.createdByCountry)}
                         <div className="flex flex-wrap items-center gap-2">
+                          <Badge color={getRuleCountry(rule) === localCountryCode ? 'blue' : getRuleCountry(rule) === 'GLOBAL' ? 'gray' : 'purple'}>
+                            {getRuleCountry(rule)}
+                          </Badge>
                           <Badge color="gray" className="flex items-center gap-1">
                             <List size={10} /> {getSectionLabel(rule.targetSection)}
                           </Badge>
@@ -194,14 +304,18 @@ export function CategoryRulesLibrary({
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity ml-4 shrink-0">
-                      <button onClick={() => onEditRule(rule)} className="p-1.5 text-slate-400 hover:text-[#0052D9] hover:bg-blue-50 rounded transition">
-                        <Edit3 size={14} />
-                      </button>
-                      <button onClick={() => onDeleteRule(rule)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition">
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
+                    {canEditRule(rule) ? (
+                      <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity ml-4 shrink-0">
+                        <button onClick={() => onEditRule(rule)} className="p-1.5 text-slate-400 hover:text-[#0052D9] hover:bg-blue-50 rounded transition">
+                          <Edit3 size={14} />
+                        </button>
+                        <button onClick={() => onDeleteRule(rule)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition">
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="ml-4 text-[11px] text-slate-400 shrink-0">{t('set.readonlyOtherRule')}</span>
+                    )}
                   </div>
                 </div>
               ))}
@@ -214,6 +328,9 @@ export function CategoryRulesLibrary({
               <h4 className="text-[14px] font-bold text-slate-800 flex items-center gap-2 uppercase tracking-wide">
                 <Bookmark size={16} className="text-amber-500" /> {t('set.refAsin')}
               </h4>
+              {localCountryCode && (
+                <span className="ml-2 text-[11px] text-slate-500">{activeSourceCountry}</span>
+              )}
             </div>
             <div className="border border-amber-100 rounded-xl bg-amber-50/30 p-4 space-y-3">
               <p className="text-xs text-slate-500 leading-relaxed">{t('set.refAsinDesc')}</p>
@@ -224,15 +341,17 @@ export function CategoryRulesLibrary({
                     className="inline-flex items-center gap-1 px-2.5 py-1 bg-white border border-amber-200 text-amber-900 text-xs font-mono rounded-full shadow-sm"
                   >
                     {asin}
-                    <button
-                      onClick={() => onRemoveCategoryRefAsin?.(activeCategory, asin)}
-                      className="text-amber-400 hover:text-red-500 transition ml-0.5"
-                    >
-                      <X size={10} />
-                    </button>
+                    {canEditSourceContent && (
+                      <button
+                        onClick={() => onRemoveCategoryRefAsin?.(activeCategory, asin)}
+                        className="text-amber-400 hover:text-red-500 transition ml-0.5"
+                      >
+                        <X size={10} />
+                      </button>
+                    )}
                   </span>
                 ))}
-                {activeRefAsins.length < 3 && (
+                {canEditSourceContent && activeRefAsins.length < 3 && (
                   <div className="flex items-center gap-1.5">
                     <input
                       ref={refAsinInputRef}
@@ -263,9 +382,15 @@ export function CategoryRulesLibrary({
               <h4 className="text-[14px] font-bold text-slate-800 flex items-center gap-2 uppercase tracking-wide">
                 <KeyRound size={16} className="text-violet-500" /> {t('set.keywordLib')}
               </h4>
+              {localCountryCode && (
+                <span className="ml-2 text-[11px] text-slate-500">{activeSourceCountry}</span>
+              )}
             </div>
             <div className="border border-violet-100 rounded-xl bg-violet-50/30 p-4 space-y-4">
               <p className="text-xs text-slate-500 leading-relaxed">{t('set.keywordLibDesc')}</p>
+              {!canEditSourceContent && (
+                <p className="text-[11px] text-slate-400">{t('set.readonlyOtherRule')}</p>
+              )}
 
               {/* Primary keyword */}
               <div>
@@ -273,11 +398,12 @@ export function CategoryRulesLibrary({
                   <Tag size={12} className="text-violet-500" /> {t('set.kwPrimary')}
                 </label>
                 <input
-                  key={`primary-${activeCategory}`}
+                  key={`primary-${activeCategory}-${activeSourceCountry}`}
                   type="text"
                   defaultValue={kwSet.primary}
                   onChange={(e) => setKwPrimary(e.target.value)}
                   onBlur={handlePrimaryBlur}
+                  disabled={!canEditSourceContent}
                   placeholder={t('set.kwPrimaryPlaceholder')}
                   className="w-full text-sm px-3 py-2 border border-violet-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-400"
                 />
@@ -294,12 +420,14 @@ export function CategoryRulesLibrary({
                     value={kwSecInput}
                     onChange={(e) => setKwSecInput(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); handleAddSecondary(); } }}
+                    disabled={!canEditSourceContent}
                     placeholder={t('set.kwSecPlaceholder')}
                     className="flex-1 text-sm px-3 py-2 border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-violet-200 focus:border-violet-300"
                   />
                   <button
                     onClick={handleAddSecondary}
-                    className="px-3 py-2 bg-violet-600 text-white rounded-lg text-xs font-semibold hover:bg-violet-700 transition flex items-center gap-1"
+                    disabled={!canEditSourceContent}
+                    className="px-3 py-2 bg-violet-600 text-white rounded-lg text-xs font-semibold hover:bg-violet-700 transition flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <Plus size={12} /> {t('modal.add')}
                   </button>
@@ -312,12 +440,14 @@ export function CategoryRulesLibrary({
                         className="inline-flex items-center gap-1 px-2.5 py-1 bg-white border border-violet-200 text-violet-700 text-xs rounded-full shadow-sm"
                       >
                         {kw}
-                        <button
-                          onClick={() => handleRemoveSecondary(kw)}
-                          className="text-violet-400 hover:text-red-500 transition ml-0.5"
-                        >
-                          <X size={10} />
-                        </button>
+                        {canEditSourceContent && (
+                          <button
+                            onClick={() => handleRemoveSecondary(kw)}
+                            className="text-violet-400 hover:text-red-500 transition ml-0.5"
+                          >
+                            <X size={10} />
+                          </button>
+                        )}
                       </span>
                     ))}
                   </div>
@@ -336,7 +466,7 @@ export function CategoryRulesLibrary({
               </h4>
               <button
                 onClick={() => onAddRule('negative', activeCategory)}
-                className="text-red-600 text-xs font-semibold hover:bg-red-100 transition flex items-center gap-1 bg-red-50 px-2.5 py-1.5 rounded-md"
+                className="text-red-600 text-xs font-semibold hover:bg-red-100 transition flex items-center gap-1 bg-red-50 px-2.5 py-1.5 rounded-md disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <Plus size={14} /> {t('modal.add')}
               </button>
@@ -356,25 +486,35 @@ export function CategoryRulesLibrary({
                     <div className="flex items-start gap-3 flex-1">
                       <div className="w-2 h-2 rounded-full bg-red-500 mt-1.5 shrink-0" />
                       <div className="space-y-1.5 w-full">
-                        <span className="text-sm font-medium text-slate-800 block">{rule.name}</span>
+                        <span className="text-sm font-medium text-slate-800 block">
+                          {localizeSystemText(rule.name, rule.nameI18n, systemLanguage)}
+                        </span>
+                        {renderCreator(rule.createdByEmail, rule.createdByCountry)}
                         <div className="flex items-center gap-2">
+                          <Badge color={getRuleCountry(rule) === localCountryCode ? 'blue' : getRuleCountry(rule) === 'GLOBAL' ? 'gray' : 'purple'}>
+                            {getRuleCountry(rule)}
+                          </Badge>
                           <Badge color="gray" className="flex items-center gap-1">
                             <List size={10} /> {getSectionLabel(rule.targetSection)}
                           </Badge>
                           <Badge color={rule.severity === 'Critical' ? 'red' : 'orange'}>
-                            {rule.severity}
+                            {rule.severity === 'Critical' ? t('modal.crit') : t('modal.high')}
                           </Badge>
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity ml-4 shrink-0">
-                      <button onClick={() => onEditRule(rule)} className="p-1.5 text-slate-400 hover:text-[#0052D9] bg-white hover:bg-blue-50 rounded shadow-sm border border-slate-100">
-                        <Edit3 size={14} />
-                      </button>
-                      <button onClick={() => onDeleteRule(rule)} className="p-1.5 text-slate-400 hover:text-red-600 bg-white hover:bg-red-50 rounded shadow-sm border border-slate-100">
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
+                    {canEditRule(rule) ? (
+                      <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity ml-4 shrink-0">
+                        <button onClick={() => onEditRule(rule)} className="p-1.5 text-slate-400 hover:text-[#0052D9] bg-white hover:bg-blue-50 rounded shadow-sm border border-slate-100">
+                          <Edit3 size={14} />
+                        </button>
+                        <button onClick={() => onDeleteRule(rule)} className="p-1.5 text-slate-400 hover:text-red-600 bg-white hover:bg-red-50 rounded shadow-sm border border-slate-100">
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="ml-4 text-[11px] text-slate-400 shrink-0">{t('set.readonlyOtherRule')}</span>
+                    )}
                   </div>
                 </div>
               ))}

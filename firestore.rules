@@ -1,9 +1,81 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Each user can only read/write their own data subtree
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function profile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)/config/profile).data;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && profile().role == 'admin';
+    }
+
+    function userCountry() {
+      return isSignedIn() ? profile().countryCode : null;
+    }
+
+    // Each user can only read/write their own private subtree
     match /users/{userId}/{document=**} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read, write: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Shared model index and country listing documents
+    match /models/{modelKey} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+
+      match /countryListings/{countryCode} {
+        allow read: if isSignedIn();
+        allow write: if isAdmin() || (isSignedIn() && userCountry() == countryCode);
+      }
+    }
+
+    // Cross-country approved listing snapshots
+    match /shared_library/{itemId} {
+      allow read: if isSignedIn();
+      allow create: if isAdmin()
+        || (isSignedIn() && request.resource.data.sourceCountry == userCountry());
+      allow update: if isAdmin()
+        || (
+          isSignedIn()
+          && resource.data.sourceCountry == userCountry()
+          && request.resource.data.sourceCountry == resource.data.sourceCountry
+        );
+      allow delete: if isAdmin()
+        || (isSignedIn() && resource.data.sourceCountry == userCountry());
+    }
+
+    // Country-scoped collaborative workspace
+    match /country_workspaces/{countryCode}/items/{modelKey} {
+      allow read: if isAdmin() || (isSignedIn() && userCountry() == countryCode);
+      allow write: if isAdmin() || (isSignedIn() && userCountry() == countryCode);
+    }
+
+    // Rules are readable across countries, but writable only by owner country (or admin).
+    // This enables "my country + others" browsing while keeping edit boundaries safe.
+    match /workspace_data/{scope}/rules/{ruleId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin() || (isSignedIn() && userCountry() == scope);
+    }
+
+    // Personas are shared for read across countries, with writes limited to owner country/admin.
+    match /workspace_data/{scope}/personas/{personaId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin() || (isSignedIn() && userCountry() == scope);
+    }
+
+    // Keyword libraries are shared for read across countries, with writes limited to owner country/admin.
+    match /workspace_data/{scope}/config/keywords {
+      allow read: if isSignedIn();
+      allow write: if isAdmin() || (isSignedIn() && userCountry() == scope);
+    }
+
+    // Country-shared operational data (settings / rules / personas / tasks / keywords / audit logs)
+    match /workspace_data/{scope}/{document=**} {
+      allow read, write: if isAdmin() || (isSignedIn() && userCountry() == scope);
     }
   }
 }

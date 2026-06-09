@@ -1,36 +1,105 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X, Sparkles, Archive } from 'lucide-react';
-import type { Rule, Task } from '@/types';
+import type { Rule, Task, SystemLanguage, AppSettings } from '@/types';
+import { localizeSystemText } from '@/lib/systemTextI18n';
+import { callLLM, parseLLMError } from '@/services/llm';
+import { useAuthStore } from '@/store/authStore';
+import { resolveWorkspaceApiKey } from '@/lib/apiKeyResolver';
 
 interface RuleModalProps {
   type: Rule['type'];
   existing?: Rule;
   archivedTasks: Task[];
   category: string;
+  appSettings?: AppSettings;
+  systemLanguage: SystemLanguage;
   onClose: () => void;
-  onSave: (data: Omit<Rule, 'id' | 'active'>) => void;
+  onSave: (data: Omit<Rule, 'id' | 'active'>) => Promise<void> | void;
 }
 
-export function RuleModal({ type, existing, archivedTasks, category, onClose, onSave }: RuleModalProps) {
+const RULE_OPTIMIZE_SYSTEM_PROMPT = `You are an expert Amazon listing rule optimizer.
+Your task: rewrite one rule instruction so it becomes precise, enforceable, and high-signal for LLM generation.
+
+Requirements:
+1. Keep the original intent and compliance boundary.
+2. Use explicit action language and measurable constraints when possible.
+3. Avoid vague wording like "good", "better", "appropriate", "etc.".
+4. Keep it concise: 1-3 sentences, no bullet list.
+5. Output only the optimized rule text, with no explanation or prefix.`;
+
+export function RuleModal({
+  type,
+  existing,
+  archivedTasks,
+  category,
+  appSettings,
+  systemLanguage,
+  onClose,
+  onSave,
+}: RuleModalProps) {
   const { t } = useTranslation();
-  const [name, setName] = useState(existing?.name ?? '');
+  const profile = useAuthStore((s) => s.profile);
+  const effectiveApiKey = resolveWorkspaceApiKey({
+    manualKey: appSettings?.apiKey,
+    countryCode: profile?.countryCode,
+  });
+  const [name, setName] = useState(
+    existing
+      ? localizeSystemText(existing.name, existing.nameI18n, systemLanguage)
+      : '',
+  );
   const [targetSection, setTargetSection] = useState<Rule['targetSection']>(existing?.targetSection ?? 'all');
   const [priority, setPriority] = useState<Rule['priority']>(existing?.priority ?? 'Required');
   const [severity, setSeverity] = useState<Rule['severity']>(existing?.severity ?? 'High');
   const [referenceAsins, setReferenceAsins] = useState<string[]>(existing?.referenceAsins ?? []);
   const [isOptimizing, setIsOptimizing] = useState(false);
+  const [optimizeError, setOptimizeError] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
-  const handleOptimize = () => {
+  const handleOptimize = async () => {
+    if (!effectiveApiKey) {
+      setOptimizeError(t('ws.apiKeyRequired'));
+      return;
+    }
     setIsOptimizing(true);
-    setTimeout(() => {
-      setName((prev) =>
-        prev
-          ? `${prev} (已应用亚马逊最佳实践：要求具体的数据指标，避免主观形容词，确保格式严谨一致。)`
-          : '基于最佳实践：提取必须明确具体数值的物理参数，以【参数名: 数值+单位】的统一格式输出，拒绝宽泛描述。'
+    setOptimizeError('');
+    try {
+      const userPrompt = [
+        `Rule type: ${type}`,
+        `Category: ${category}`,
+        `Target section: ${targetSection}`,
+        type === 'instruction' ? `Priority: ${priority}` : `Severity: ${severity}`,
+        type === 'instruction'
+          ? `Reference ASINs: ${referenceAsins.length > 0 ? referenceAsins.join(', ') : 'None'}`
+          : null,
+        '',
+        'Current rule text:',
+        name.trim() || t('modal.ruleOptimizeTemplate'),
+        '',
+        'Rewrite this rule following the requirements. Output only optimized rule text.',
+      ]
+        .filter(Boolean)
+        .join('\n');
+
+      const result = await callLLM(
+        [
+          { role: 'system', content: RULE_OPTIMIZE_SYSTEM_PROMPT },
+          { role: 'user', content: userPrompt },
+        ],
+        appSettings?.model ?? 'gpt-5.5',
+        effectiveApiKey,
+        { temperature: 0.4, maxTokens: 320 },
       );
+      const optimized = result.content.trim();
+      if (optimized) {
+        setName(optimized);
+      }
+    } catch (err) {
+      setOptimizeError(parseLLMError(err));
+    } finally {
       setIsOptimizing(false);
-    }, 1500);
+    }
   };
 
   const addAsin = (asin: string) => {
@@ -41,8 +110,9 @@ export function RuleModal({ type, existing, archivedTasks, category, onClose, on
 
   const removeAsin = (asin: string) => setReferenceAsins(referenceAsins.filter((a) => a !== asin));
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!name.trim()) return;
+    setIsSaving(true);
     const base = {
       category,
       type,
@@ -56,8 +126,12 @@ export function RuleModal({ type, existing, archivedTasks, category, onClose, on
     } else {
       base.severity = severity;
     }
-    onSave(base);
-    onClose();
+    try {
+      await onSave(base);
+      onClose();
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -89,6 +163,9 @@ export function RuleModal({ type, existing, archivedTasks, category, onClose, on
               onChange={(e) => setName(e.target.value)}
               className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-[#0052D9] focus:ring-1 focus:ring-[#0052D9] outline-none resize-none shadow-inner"
             />
+            {optimizeError && (
+              <p className="mt-1.5 text-xs text-red-500">{optimizeError}</p>
+            )}
           </div>
 
           {/* Scope */}
@@ -140,12 +217,12 @@ export function RuleModal({ type, existing, archivedTasks, category, onClose, on
                   className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none bg-white disabled:bg-slate-50 disabled:text-slate-400"
                 >
                   <option value="" disabled>
-                    {referenceAsins.length >= 3 ? 'Max 3' : '...'}
+                    {referenceAsins.length >= 3 ? t('modal.refMax') : '...'}
                   </option>
                   {archivedTasks
                     .filter((task) => !referenceAsins.includes(task.asin))
                     .map((task) => (
-                      <option key={task.id} value={task.asin}>{task.asin} - {task.name || 'N/A'}</option>
+                      <option key={task.id} value={task.asin}>{task.asin} - {task.name || t('modal.notAvailable')}</option>
                     ))}
                 </select>
                 <p className="text-xs text-slate-500 mt-1.5">{t('modal.refDesc')}</p>
@@ -174,10 +251,10 @@ export function RuleModal({ type, existing, archivedTasks, category, onClose, on
             </button>
             <button
               onClick={handleSave}
-              disabled={!name.trim() || isOptimizing}
+              disabled={!name.trim() || isOptimizing || isSaving}
               className="px-5 py-2 text-sm font-medium text-white bg-[#0052D9] hover:bg-blue-800 rounded-md shadow-sm disabled:opacity-50 transition"
             >
-              {t('modal.save')}
+              {isSaving ? t('global.saving') : t('modal.save')}
             </button>
           </div>
         </div>

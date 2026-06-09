@@ -2,7 +2,85 @@
 // Core domain types for Right First Time
 // ============================================================
 
-export type LanguageCode = 'en' | 'de' | 'fr' | 'it' | 'es' | 'zh';
+export type LanguageCode = 'en' | 'de' | 'fr' | 'it' | 'es' | 'zh' | 'nl' | 'pl' | 'sv';
+export type CountryCode = 'UK' | 'DE' | 'IT' | 'ES' | 'FR' | 'BE' | 'NL' | 'PL' | 'SE' | 'GLOBAL';
+export type BusinessCountryCode = Exclude<CountryCode, 'GLOBAL'>;
+export type UserRole = 'user' | 'admin';
+export interface UserProfile {
+  uid: string;
+  email: string;
+  countryCode: CountryCode;
+  role: UserRole;
+  createdAt: string;
+  updatedAt: string;
+}
+export type ListingStatus = 'draft' | 'pending' | 'approved' | 'rejected';
+export type SharedSourceType = 'native' | 'shared_import';
+export type WorkspaceItemStatus = 'active' | 'archived';
+
+export interface ModelRecord {
+  modelKey: string;
+  displayName: string;
+  asinList: string[];
+  countriesAvailable: BusinessCountryCode[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CountryListing {
+  modelKey: string;
+  countryCode: BusinessCountryCode;
+  asin?: string;
+  status: ListingStatus;
+  title?: string;
+  bullets?: string[];
+  description?: string;
+  attributes?: Record<string, string>;
+  media?: string[];
+  approvedAt?: string;
+  sourceType: SharedSourceType;
+  sourceListingId?: string;
+  updatedAt: string;
+}
+
+export interface SharedLibraryItem {
+  id: string; // `${modelKey}_${countryCode}`
+  modelKey: string;
+  sourceCountry: BusinessCountryCode;
+  asinList: string[];
+  summaryTitle?: string;
+  summaryBullets?: string[];
+  thumbnail?: string;
+  approvedAt: string;
+  snapshot: Partial<CountryListing>;
+  searchKeywords: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WorkspaceItem {
+  modelKey: string;
+  countryCode: BusinessCountryCode;
+  fromSharedId?: string;
+  fromSharedCountry?: BusinessCountryCode;
+  workspaceStatus: WorkspaceItemStatus;
+  localOverrides: {
+    title?: string;
+    bullets?: string[];
+    description?: string;
+    attributes?: Record<string, string>;
+    media?: string[];
+  };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SharedKeywordLibraryItem {
+  sourceCountry: CountryCode;
+  map: KeywordMap;
+  refAsins: CategoryRefAsinMap;
+  updatedAt: string;
+}
 /**
  * Two models per vendor: fast + high capability.
  * OpenAI / Google IDs verified against official API docs (Apr 2026).
@@ -10,6 +88,7 @@ export type LanguageCode = 'en' | 'de' | 'fr' | 'it' | 'es' | 'zh';
 export type LLMModel =
   | 'gpt-5.3-chat-latest'
   | 'gpt-5.4-pro'
+  | 'gpt-5.5'
   | 'claude-3-5-haiku'
   | 'claude-3-7-sonnet'
   | 'gemini-2.5-flash'
@@ -21,7 +100,9 @@ export type RulePriority = 'Required' | 'Suggested';
 export type RuleSeverity = 'Critical' | 'High';
 export type TaskStatus = 'pending' | 'fetched' | 'review' | 'archived';
 export type RiskLevel = 'Low' | 'Medium' | 'High';
-export type SystemLanguage = 'zh' | 'en';
+export type SystemLanguage = 'cn' | 'en';
+export type SystemLanguageTextMap = Partial<Record<SystemLanguage, string>>;
+export type CategoryLabelMap = Record<string, SystemLanguageTextMap>;
 
 // ============================================================
 // Task
@@ -34,10 +115,45 @@ export interface AplusModule {
   imageUrl?: string;
 }
 
+/**
+ * A single attachment the user dropped or pasted into a task's attachment area.
+ * Images / files are uploaded to Firebase Storage (only the download URL + path
+ * are stored here); pasted text is kept inline.
+ */
+export interface TaskAttachment {
+  id: string;
+  kind: 'image' | 'file' | 'text';
+  /** Firebase Storage download URL (image / file kinds). */
+  url?: string;
+  /** Storage object path — used for deletion (image / file kinds). */
+  storagePath?: string;
+  /** Original file name (image / file kinds). */
+  name?: string;
+  /** MIME type (image / file kinds). */
+  mimeType?: string;
+  /** Size in bytes (image / file kinds). */
+  size?: number;
+  /** Inline text content (text kind). */
+  text?: string;
+  createdAt: string;
+}
+
 export interface Task {
   id: string;
+  modelKey?: string;
   asin: string;
+  /** Additional product ASINs supplied by the user (main asin remains `asin`). */
+  extraAsins?: string[];
+  /** Extra ASINs grouped by the country workspace that added them. */
+  extraAsinsByCountry?: Record<string, string[]>;
+  /** Product EAN / GTIN codes supplied by the user. */
+  eans?: string[];
+  /** EAN / GTIN codes grouped by the country workspace that added them. */
+  eansByCountry?: Record<string, string[]>;
   name: string;
+  countryCode?: BusinessCountryCode;
+  fromSharedId?: string;
+  fromSharedCountry?: BusinessCountryCode;
   category: string;
   language: LanguageCode;
   personaIds: string[];
@@ -51,8 +167,14 @@ export interface Task {
   bullets?: string[];
   description?: string;
   specs?: Record<string, string>;
+  /** Export-zone images (default target for fetched and generated outputs). */
   images?: string[];
+  /** Material-zone images (reference pool; not part of export batch). */
+  materialImages?: string[];
   aplus?: AplusModule[];
+
+  // ── User attachments — drag/drop or paste reference material per task ──
+  attachments?: TaskAttachment[];
 
   // ── AI-generated translations ──────────────────────────────
   translations?: TranslationMap;
@@ -75,6 +197,13 @@ export interface Persona {
   id: string;
   name: string;
   description: string;
+  nameI18n?: SystemLanguageTextMap;
+  descriptionI18n?: SystemLanguageTextMap;
+  createdByUid?: string;
+  createdByEmail?: string;
+  createdByCountry?: CountryCode;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 // ============================================================
@@ -87,12 +216,18 @@ export interface Rule {
   type: RuleType;
   targetSection: TargetSection;
   name: string;
+  nameI18n?: SystemLanguageTextMap;
   active: boolean;
   // instruction-type fields
   priority?: RulePriority;
   referenceAsins?: string[];
   // negative-type fields
   severity?: RuleSeverity;
+  createdByUid?: string;
+  createdByEmail?: string;
+  createdByCountry?: CountryCode;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 // ============================================================
@@ -102,12 +237,19 @@ export interface Rule {
 export interface AppSettings {
   systemLanguage: SystemLanguage;
   targetLanguage: LanguageCode;
-  translationLang: 'en' | 'zh';
+  // Language shown in the translation column. Besides zh/en, the target country language
+  // (AppSettings.targetLanguage) can be selected to preview a literal translation.
+  translationLang: LanguageCode;
   model: LLMModel;
   apiKey: string;
   isSaved: boolean;
   tinyfishApiKey: string;
   isTinyfishSaved: boolean;
+  // Rule pick keys (`${country}:${id}`) the user last selected for image generation.
+  // Empty / undefined => no rules applied by default (user opts in via checkboxes).
+  selectedImageRuleKeys?: string[];
+  // Rule pick keys the user last selected for listing (AI rewrite) generation.
+  selectedListingRuleKeys?: string[];
 }
 
 // ============================================================
@@ -282,7 +424,7 @@ export type CategoryRefAsinMap = Record<string, string[]>;
 // ============================================================
 
 export type BadgeColor = 'blue' | 'green' | 'red' | 'orange' | 'gray' | 'purple';
-export type ViewMode = 'workspace' | 'rules';
+export type ViewMode = 'workspace' | 'sharedLibrary' | 'rules';
 
 export interface LanguageOption {
   code: LanguageCode;

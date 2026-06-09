@@ -4,13 +4,15 @@ import {
   X, Search, RefreshCw, CheckCircle, AlertCircle, Loader2,
   ChevronDown, ChevronUp, ImageOff, Minimize2, Maximize2, Circle,
 } from 'lucide-react';
-import type { Task, AppSettings } from '@/types';
+import type { Task, AppSettings, CategoryLabelMap, SystemLanguage, BusinessCountryCode } from '@/types';
 import {
-  fetchListingSSE, extractAsinFromUrl,
-  ALL_FETCH_FIELDS, FETCH_FIELD_LABELS,
+  fetchListingSSE, extractAsinFromUrl, normalizeAmazonUrlForCountry,
+  ALL_FETCH_FIELDS,
   type FetchedListing, type FetchField,
 } from '@/services/tinyfish';
 import { normalizeProductImageUrl, remoteProductImgProps } from '@/lib/remoteImage';
+import { getLanguageForCountry } from '@/lib/countryLanguage';
+import { DEFAULT_CATEGORY } from '@/lib/categoryTaxonomy';
 
 type Step = 'input' | 'fetching' | 'preview' | 'batch' | 'error';
 
@@ -24,7 +26,10 @@ interface BatchItem {
 
 interface CreateTaskModalProps {
   categories: string[];
+  categoryLabels: CategoryLabelMap;
+  systemLanguage: SystemLanguage;
   appSettings: AppSettings;
+  accountCountryCode?: BusinessCountryCode | null;
   onClose: () => void;
   /** activateAfter=true (default): switch workspace to the created task.
    *  activateAfter=false: silently add the task (batch mode). */
@@ -55,13 +60,26 @@ function PreviewSection({
   );
 }
 
-export function CreateTaskModal({ categories, appSettings, onClose, onCreate }: CreateTaskModalProps) {
+export function CreateTaskModal({
+  categories,
+  categoryLabels,
+  systemLanguage,
+  appSettings,
+  accountCountryCode = null,
+  onClose,
+  onCreate,
+}: CreateTaskModalProps) {
   const { t } = useTranslation();
 
   // ── Shared state ─────────────────────────────────────────────
   const [step, setStep] = useState<Step>('input');
   const [urlsInput, setUrlsInput] = useState('');
-  const [category, setCategory]   = useState(categories[0] ?? '通用');
+  const [category, setCategory]   = useState(
+    categories[0] ?? DEFAULT_CATEGORY,
+  );
+  const displayCategoryName = (value: string): string =>
+    categoryLabels[value]?.[systemLanguage] || value;
+
   const [selectedFields, setSelectedFields] = useState<Set<FetchField>>(new Set(ALL_FETCH_FIELDS));
 
   // ── Single-URL states (preview flow) ─────────────────────────
@@ -70,6 +88,7 @@ export function CreateTaskModal({ categories, appSettings, onClose, onCreate }: 
   const [fetched, setFetched]     = useState<FetchedListing | null>(null);
   const [editName, setEditName]   = useState('');
   const [editAsin, setEditAsin]   = useState('');
+  const [editModelKey, setEditModelKey] = useState('');
   const [imgIdx, setImgIdx]       = useState(0);
   const logEndRef = useRef<HTMLDivElement>(null);
 
@@ -94,24 +113,37 @@ export function CreateTaskModal({ categories, appSettings, onClose, onCreate }: 
     () => urlsInput.split('\n').map((u) => u.trim()).filter(Boolean),
     [urlsInput],
   );
+  const crawlUrls = useMemo(
+    () => parsedUrls.map((u) => normalizeAmazonUrlForCountry(u, accountCountryCode)),
+    [parsedUrls, accountCountryCode],
+  );
   const isBatch = parsedUrls.length > 1;
-  const firstUrl = parsedUrls[0] ?? '';
+  const firstUrl = crawlUrls[0] ?? '';
   const urlAsin = extractAsinFromUrl(firstUrl);
+  const preferredLanguage = accountCountryCode ? getLanguageForCountry(accountCountryCode) : undefined;
 
   // ── Single-URL fetch → preview ────────────────────────────────
   const handleFetchSingle = async () => {
     if (!firstUrl) return;
     const apiKey = appSettings.tinyfishApiKey;
-    if (!apiKey) { setErrorMsg('请先在设置中配置 TinyFish API Key'); setStep('error'); return; }
+    if (!apiKey) { setErrorMsg(t('modal.tinyfishApiRequired')); setStep('error'); return; }
     setStep('fetching');
-    setLogs(['正在连接 TinyFish Agent…']);
+    setLogs([t('modal.tinyfishConnecting')]);
     setErrorMsg('');
     setImgIdx(0);
     try {
-      const data = await fetchListingSSE(firstUrl, apiKey, selectedFields, (msg) => setLogs((p) => [...p, msg]));
+      const data = await fetchListingSSE(
+        firstUrl,
+        apiKey,
+        selectedFields,
+        (msg) => setLogs((p) => [...p, msg]),
+        preferredLanguage,
+      );
       setFetched(data);
       setEditName(data.title);
       setEditAsin(data.asin || urlAsin);
+      // New URL crawl requires user-confirmed standard model key.
+      setEditModelKey('');
       setStep('preview');
     } catch (e) {
       setErrorMsg(e instanceof Error ? e.message : String(e));
@@ -121,8 +153,10 @@ export function CreateTaskModal({ categories, appSettings, onClose, onCreate }: 
 
   // ── Single-URL confirm create ─────────────────────────────────
   const handleCreateSingle = () => {
+    if (!editModelKey.trim()) return;
     if (!editAsin.trim() && !editName.trim()) return;
     onCreate({
+      modelKey:    editModelKey.trim(),
       asin:        editAsin.trim().toUpperCase() || `MANUAL-${Date.now()}`,
       name:        editName.trim(),
       category,
@@ -144,7 +178,7 @@ export function CreateTaskModal({ categories, appSettings, onClose, onCreate }: 
   // ── Batch processing ──────────────────────────────────────────
   const startBatch = async (urls: string[]) => {
     const apiKey = appSettings.tinyfishApiKey;
-    if (!apiKey) { setErrorMsg('请先在设置中配置 TinyFish API Key'); setStep('error'); return; }
+    if (!apiKey) { setErrorMsg(t('modal.tinyfishApiRequired')); setStep('error'); return; }
 
     const initialItems: BatchItem[] = urls.map((url) => ({ url, status: 'pending' }));
     setBatchItems(initialItems);
@@ -155,7 +189,7 @@ export function CreateTaskModal({ categories, appSettings, onClose, onCreate }: 
       if (!batchRunning.current) break;
 
       setBatchItems((prev) => prev.map((item, idx) =>
-        idx === i ? { ...item, status: 'running', lastLog: '正在抓取…' } : item,
+        idx === i ? { ...item, status: 'running', lastLog: t('modal.batchStatusRunning') } : item,
       ));
 
       try {
@@ -166,6 +200,7 @@ export function CreateTaskModal({ categories, appSettings, onClose, onCreate }: 
           (msg) => setBatchItems((prev) => prev.map((item, idx) =>
             idx === i ? { ...item, lastLog: msg } : item,
           )),
+          preferredLanguage,
         );
         const rawAsin = (data.asin || extractAsinFromUrl(urls[i]) || `MANUAL-${Date.now()}`).toUpperCase();
         onCreate({
@@ -198,7 +233,7 @@ export function CreateTaskModal({ categories, appSettings, onClose, onCreate }: 
 
   const handleStart = () => {
     if (isBatch) {
-      void startBatch(parsedUrls);
+      void startBatch(crawlUrls);
     } else {
       void handleFetchSingle();
     }
@@ -209,6 +244,7 @@ export function CreateTaskModal({ categories, appSettings, onClose, onCreate }: 
     setLogs([]);
     setFetched(null);
     setErrorMsg('');
+    setEditModelKey('');
     batchRunning.current = false;
   };
 
@@ -216,6 +252,15 @@ export function CreateTaskModal({ categories, appSettings, onClose, onCreate }: 
   const batchDoneCount = batchItems.filter((i) => i.status === 'done' || i.status === 'error').length;
   const batchAllDone   = batchItems.length > 0 && batchDoneCount === batchItems.length;
   const batchStillRunning = batchItems.some((i) => i.status === 'running');
+  const runningInBackground = step === 'fetching' || (step === 'batch' && !batchAllDone);
+
+  const handleHeaderClose = () => {
+    if (runningInBackground) {
+      setIsMinimized(true);
+      return;
+    }
+    onClose();
+  };
 
   // ── Images for single preview ─────────────────────────────────
   const images =
@@ -227,6 +272,29 @@ export function CreateTaskModal({ categories, appSettings, onClose, onCreate }: 
   // Minimized chip (batch running in background)
   // ────────────────────────────────────────────────────────────────────
   if (isMinimized) {
+    const minimizedTitle =
+      step === 'batch'
+        ? (batchAllDone ? t('modal.batchDone') : t('modal.batchRunning'))
+        : step === 'fetching'
+          ? t('modal.stepFetching')
+          : step === 'preview'
+            ? t('modal.stepPreview')
+            : step === 'error'
+              ? t('modal.stepError')
+              : t('modal.createTask');
+
+    const minimizedSubtitle =
+      step === 'batch'
+        ? `${t('modal.batchSuccessCount', {
+          done: batchItems.filter((i) => i.status === 'done').length,
+          total: batchItems.length,
+        })}${batchStillRunning ? '…' : ` — ${t('modal.batchDone')}`}`
+        : step === 'fetching'
+          ? t('modal.tinyfishFetching')
+          : step === 'error'
+            ? errorMsg || t('modal.stepError')
+            : t('modal.stepPreview');
+
     return (
       <div
         role="button"
@@ -235,19 +303,15 @@ export function CreateTaskModal({ categories, appSettings, onClose, onCreate }: 
         onKeyDown={(e) => e.key === 'Enter' && setIsMinimized(false)}
         className="fixed bottom-6 right-6 z-50 bg-white border border-slate-200 rounded-2xl shadow-xl px-4 py-3 flex items-center gap-3 cursor-pointer hover:shadow-2xl hover:border-[#0052D9] transition-all select-none"
       >
-        {batchStillRunning
+        {(step === 'fetching' || batchStillRunning)
           ? <Loader2 size={18} className="animate-spin text-[#0052D9] shrink-0" />
-          : <CheckCircle size={18} className="text-emerald-500 shrink-0" />
+          : step === 'error'
+            ? <AlertCircle size={18} className="text-red-500 shrink-0" />
+            : <CheckCircle size={18} className="text-emerald-500 shrink-0" />
         }
         <div>
-          <p className="text-sm font-semibold text-slate-800">{t('modal.batchRunning')}</p>
-          <p className="text-xs text-slate-500">
-            {t('modal.batchSuccessCount', {
-              done: batchItems.filter((i) => i.status === 'done').length,
-              total: batchItems.length,
-            })}
-            {batchStillRunning ? '…' : ` — ${t('modal.batchDone')}`}
-          </p>
+          <p className="text-sm font-semibold text-slate-800">{minimizedTitle}</p>
+          <p className="text-xs text-slate-500 truncate max-w-[260px]">{minimizedSubtitle}</p>
         </div>
         <Maximize2 size={14} className="text-slate-400 ml-2 shrink-0" />
       </div>
@@ -275,13 +339,13 @@ export function CreateTaskModal({ categories, appSettings, onClose, onCreate }: 
               : <Loader2 size={15} className="animate-spin text-[#0052D9]" />
             )}
             {step === 'input'    && t('modal.createTask')}
-            {step === 'fetching' && '正在获取产品数据…'}
-            {step === 'preview'  && '数据预览 — 确认后创建任务'}
-            {step === 'error'    && '获取失败'}
+            {step === 'fetching' && t('modal.stepFetching')}
+            {step === 'preview'  && t('modal.stepPreview')}
+            {step === 'error'    && t('modal.stepError')}
             {step === 'batch'    && (batchAllDone ? t('modal.batchDone') : t('modal.batchRunning'))}
           </h3>
           <div className="flex items-center gap-1">
-            {step === 'batch' && !batchAllDone && (
+            {runningInBackground && (
               <button
                 type="button"
                 onClick={() => setIsMinimized(true)}
@@ -291,7 +355,11 @@ export function CreateTaskModal({ categories, appSettings, onClose, onCreate }: 
                 <Minimize2 size={16} />
               </button>
             )}
-            <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-600 transition rounded hover:bg-slate-100">
+            <button
+              onClick={handleHeaderClose}
+              title={runningInBackground ? t('modal.batchMinimize') : t('modal.cancel')}
+              className="p-1.5 text-slate-400 hover:text-slate-600 transition rounded hover:bg-slate-100"
+            >
               <X size={18} />
             </button>
           </div>
@@ -312,15 +380,18 @@ export function CreateTaskModal({ categories, appSettings, onClose, onCreate }: 
                 onChange={(e) => setUrlsInput(e.target.value)}
                 className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:border-[#0052D9] focus:ring-1 focus:ring-[#0052D9] outline-none shadow-inner resize-none font-mono text-[12px] leading-relaxed"
               />
+              <p className="mt-1.5 text-[11px] text-slate-500 leading-relaxed">
+                {t('modal.batchUrlsGuide')}
+              </p>
               <div className="flex items-center justify-between mt-1.5">
                 {!isBatch && urlAsin && (
                   <p className="text-xs text-slate-400">
-                    检测到 ASIN：<span className="font-mono text-[#0052D9]">{urlAsin}</span>
+                    {t('modal.detectedAsin')}: <span className="font-mono text-[#0052D9]">{urlAsin}</span>
                   </p>
                 )}
                 {isBatch && (
                   <p className="text-xs text-slate-500">
-                    已输入 <span className="font-medium text-[#0052D9]">{parsedUrls.length}</span> 个 URL
+                    {t('modal.inputUrlsCount', { count: parsedUrls.length })}
                   </p>
                 )}
                 {!isBatch && !urlAsin && <span />}
@@ -330,8 +401,8 @@ export function CreateTaskModal({ categories, appSettings, onClose, onCreate }: 
             {/* Content fields */}
             <div>
               <p className="text-[13px] font-medium text-slate-700 mb-2">
-                需要提取的内容
-                <span className="text-slate-400 font-normal ml-1 text-xs">（标题/品牌/ASIN 默认提取）</span>
+                {t('modal.extractFields')}
+                <span className="text-slate-400 font-normal ml-1 text-xs">({t('modal.extractFieldsHint')})</span>
               </p>
               <div className="grid grid-cols-3 gap-2">
                 {ALL_FETCH_FIELDS.map((field) => {
@@ -356,7 +427,7 @@ export function CreateTaskModal({ categories, appSettings, onClose, onCreate }: 
                           </svg>
                         )}
                       </span>
-                      {FETCH_FIELD_LABELS[field]}
+                      {t(`modal.fetchField.${field}`)}
                     </button>
                   );
                 })}
@@ -370,7 +441,11 @@ export function CreateTaskModal({ categories, appSettings, onClose, onCreate }: 
                 onChange={(e) => setCategory(e.target.value)}
                 className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:border-[#0052D9] outline-none bg-white shadow-inner"
               >
-                {categories.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
+                {categories.map((cat) => (
+                  <option key={cat} value={cat}>
+                    {displayCategoryName(cat)}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -406,11 +481,18 @@ export function CreateTaskModal({ categories, appSettings, onClose, onCreate }: 
             </div>
             <p className="flex items-center gap-1.5 text-xs text-slate-400">
               <Loader2 size={12} className="animate-spin" />
-              正在通过 TinyFish Agent 解析页面，提取标题/BP/描述/参数/图片/A+…
+              {t('modal.tinyfishFetching')}
             </p>
-            <div className="flex justify-end">
+            <div className="flex justify-between">
+              <button
+                type="button"
+                onClick={() => setIsMinimized(true)}
+                className="px-4 py-2 text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition flex items-center gap-1.5"
+              >
+                <Minimize2 size={14} /> {t('modal.batchMinimize')}
+              </button>
               <button onClick={resetToInput} className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 hover:bg-red-50 hover:text-red-600 rounded-lg transition">
-                取消
+                {t('modal.cancel')}
               </button>
             </div>
           </div>
@@ -539,20 +621,32 @@ export function CreateTaskModal({ categories, appSettings, onClose, onCreate }: 
                         ))}
                       </div>
                     )}
-                    <p className="text-[10px] text-slate-400">{images.length} 张图片已提取</p>
+                    <p className="text-[10px] text-slate-400">{t('modal.imagesFetched', { count: images.length })}</p>
                   </>
                 ) : (
                   <div className="aspect-square rounded-xl border border-slate-100 bg-slate-50 flex flex-col items-center justify-center gap-2 text-slate-400">
                     <ImageOff size={28} className="opacity-40" />
-                    <p className="text-xs">未获取到图片 URL</p>
-                    <p className="text-[10px] text-slate-300 text-center px-3">图片通常需要浏览器会话或 CDN 鉴权</p>
+                    <p className="text-xs">{t('modal.noImageUrl')}</p>
+                    <p className="text-[10px] text-slate-300 text-center px-3">{t('modal.noImageUrlHint')}</p>
                   </div>
                 )}
               </div>
 
               <div className="col-span-3 space-y-3">
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1">产品名称</label>
+                  <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1">
+                    {appSettings.systemLanguage === 'cn' ? '标准 Model 名（必填）' : 'Standard Model Name (Required)'}
+                  </label>
+                  <input
+                    type="text"
+                    value={editModelKey}
+                    onChange={(e) => setEditModelKey(e.target.value)}
+                    placeholder={appSettings.systemLanguage === 'cn' ? '请输入标准 Model 名' : 'Enter standard model name'}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium focus:border-[#0052D9] focus:ring-1 focus:ring-[#0052D9] outline-none shadow-inner"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1">{t('modal.previewName')}</label>
                   <textarea
                     rows={3}
                     value={editName}
@@ -562,13 +656,13 @@ export function CreateTaskModal({ categories, appSettings, onClose, onCreate }: 
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1">ASIN</label>
+                    <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1">{t('modal.previewAsin')}</label>
                     <input type="text" value={editAsin} onChange={(e) => setEditAsin(e.target.value)}
                       className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono focus:border-[#0052D9] outline-none shadow-inner" />
                   </div>
                   {fetched.brand && (
                     <div>
-                      <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1">品牌</label>
+                      <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1">{t('modal.previewBrand')}</label>
                       <input type="text" readOnly value={fetched.brand}
                         className="w-full border border-slate-100 rounded-lg px-3 py-2 text-sm bg-slate-50 text-slate-600 cursor-default shadow-inner" />
                     </div>
@@ -576,15 +670,15 @@ export function CreateTaskModal({ categories, appSettings, onClose, onCreate }: 
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1">产品分类</label>
+                    <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1">{t('modal.previewCategory')}</label>
                     <select value={category} onChange={(e) => setCategory(e.target.value)}
                       className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-[#0052D9] outline-none bg-white shadow-inner">
-                      {categories.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
+                      {categories.map((cat) => <option key={cat} value={cat}>{displayCategoryName(cat)}</option>)}
                     </select>
                   </div>
                   {fetched.price && (
                     <div>
-                      <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1">价格</label>
+                      <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1">{t('modal.previewPrice')}</label>
                       <p className="text-sm font-semibold text-green-600 mt-2">{fetched.price}</p>
                     </div>
                   )}
@@ -606,13 +700,13 @@ export function CreateTaskModal({ categories, appSettings, onClose, onCreate }: 
             )}
 
             {fetched.description && (
-              <PreviewSection title="产品描述" defaultOpen={false}>
+              <PreviewSection title={t('modal.previewDescription')} defaultOpen={false}>
                 <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-line">{fetched.description}</p>
               </PreviewSection>
             )}
 
             {hasSpecs && (
-              <PreviewSection title="技术参数" count={Object.keys(fetched.specs!).length} defaultOpen={false}>
+              <PreviewSection title={t('modal.previewSpecs')} count={Object.keys(fetched.specs!).length} defaultOpen={false}>
                 <div className="grid grid-cols-2 gap-x-6 gap-y-1">
                   {Object.entries(fetched.specs!).map(([k, v]) => (
                     <div key={k} className="flex gap-2 py-1 border-b border-slate-50 last:border-0">
@@ -625,7 +719,7 @@ export function CreateTaskModal({ categories, appSettings, onClose, onCreate }: 
             )}
 
             {hasAplus && (
-              <PreviewSection title="A+ 内容" count={fetched.aplus!.length} defaultOpen={false}>
+              <PreviewSection title={t('modal.previewAplus')} count={fetched.aplus!.length} defaultOpen={false}>
                 <div className="space-y-4">
                   {fetched.aplus!.map((mod, i) => (
                     <div key={i} className="flex gap-4 p-3 bg-slate-50 rounded-lg border border-slate-100">
@@ -649,7 +743,7 @@ export function CreateTaskModal({ categories, appSettings, onClose, onCreate }: 
 
             <div className="pt-2 border-t border-slate-100 flex justify-between items-center sticky bottom-0 bg-white pb-1">
               <button onClick={resetToInput} className="text-sm text-slate-500 hover:text-slate-700 flex items-center gap-1.5 transition">
-                <RefreshCw size={13} /> 重新获取
+                <RefreshCw size={13} /> {t('modal.refetch')}
               </button>
               <div className="flex gap-3">
                 <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-md transition">
@@ -657,10 +751,10 @@ export function CreateTaskModal({ categories, appSettings, onClose, onCreate }: 
                 </button>
                 <button
                   onClick={handleCreateSingle}
-                  disabled={!editAsin.trim() && !editName.trim()}
+                  disabled={!editModelKey.trim() || (!editAsin.trim() && !editName.trim())}
                   className="px-5 py-2 text-sm font-semibold text-white bg-[#0052D9] hover:bg-blue-800 rounded-md transition shadow-sm flex items-center gap-1.5 disabled:opacity-40"
                 >
-                  <CheckCircle size={14} /> 确认创建任务
+                  <CheckCircle size={14} /> {t('modal.confirmCreateTask')}
                 </button>
               </div>
             </div>
@@ -678,7 +772,7 @@ export function CreateTaskModal({ categories, appSettings, onClose, onCreate }: 
                 {t('modal.cancel')}
               </button>
               <button onClick={resetToInput} className="px-4 py-2 text-sm font-medium text-white bg-[#0052D9] hover:bg-blue-800 rounded-md transition shadow-sm flex items-center gap-1.5">
-                <RefreshCw size={13} /> 重试
+                <RefreshCw size={13} /> {t('modal.retry')}
               </button>
             </div>
           </div>

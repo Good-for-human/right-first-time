@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Settings, ExternalLink } from 'lucide-react';
 import type { AppSettings, LLMModel } from '@/types';
@@ -56,7 +57,22 @@ function getProvider(model: LLMModel): ProviderInfo {
 
 export function LLMConfig({ appSettings, onChange }: LLMConfigProps) {
   const { t } = useTranslation();
-  const provider = getProvider(appSettings.model);
+  const provider = getProvider('gpt-5.5');
+  const [editingApiKey, setEditingApiKey] = useState(false);
+  const shouldMaskApiKey = !editingApiKey;
+  const showModifyKey = shouldMaskApiKey;
+
+  useEffect(() => {
+    if (appSettings.model !== 'gpt-5.5') {
+      onChange({ model: 'gpt-5.5' });
+    }
+  }, [appSettings.model, onChange]);
+
+  useEffect(() => {
+    if (appSettings.isSaved) {
+      setEditingApiKey(false);
+    }
+  }, [appSettings.isSaved]);
 
   return (
     <div className="p-6 bg-white border border-slate-200 rounded-xl shadow-sm">
@@ -70,28 +86,31 @@ export function LLMConfig({ appSettings, onChange }: LLMConfigProps) {
         <div>
           <label className="block text-[13px] font-medium text-slate-700 mb-1.5">{t('set.defaultModel')}</label>
           <select
-            value={appSettings.model}
-            onChange={(e) => onChange({ model: e.target.value as AppSettings['model'] })}
+            value="gpt-5.5"
+            onChange={() => {}}
             className="w-full border border-slate-300 rounded-md px-3 py-2 text-sm focus:border-[#0052D9] focus:ring-1 focus:ring-[#0052D9] outline-none bg-white"
           >
             <optgroup label="OpenAI">
-              <option value="gpt-5.3-chat-latest" title="API: gpt-5.3-chat-latest">
-                GPT-5.3 Chat · 速度快
+              <option value="gpt-5.5" title="API: gpt-5.5">
+                GPT-5.5 · {t('set.modelAvailable')}
               </option>
-              <option value="gpt-5.4-pro" title="API: gpt-5.4-pro">
-                GPT-5.4 Pro · 性能高
+              <option value="gpt-5.3-chat-latest" disabled title={t('set.modelUnavailable')}>
+                GPT-5.3 Chat · {t('set.modelUnavailable')}
+              </option>
+              <option value="gpt-5.4-pro" disabled title={t('set.modelUnavailable')}>
+                GPT-5.4 Pro · {t('set.modelUnavailable')}
               </option>
             </optgroup>
             <optgroup label="Anthropic">
-              <option value="claude-3-5-haiku">Claude 3.5 Haiku · 速度快</option>
-              <option value="claude-3-7-sonnet">Claude 3.7 Sonnet · 性能高</option>
+              <option value="claude-3-5-haiku" disabled>Claude 3.5 Haiku · {t('set.modelUnavailable')}</option>
+              <option value="claude-3-7-sonnet" disabled>Claude 3.7 Sonnet · {t('set.modelUnavailable')}</option>
             </optgroup>
             <optgroup label="Google">
-              <option value="gemini-2.5-flash" title="API: gemini-2.5-flash">
-                Gemini 2.5 Flash · 速度快
+              <option value="gemini-2.5-flash" disabled title={t('set.modelUnavailable')}>
+                Gemini 2.5 Flash · {t('set.modelUnavailable')}
               </option>
-              <option value="gemini-2.5-pro" title="API: gemini-2.5-pro">
-                Gemini 2.5 Pro · 性能高
+              <option value="gemini-2.5-pro" disabled title={t('set.modelUnavailable')}>
+                Gemini 2.5 Pro · {t('set.modelUnavailable')}
               </option>
             </optgroup>
           </select>
@@ -100,17 +119,23 @@ export function LLMConfig({ appSettings, onChange }: LLMConfigProps) {
           <div className={`mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border ${provider.bg} ${provider.border} ${provider.color}`}>
             {provider.name} API
           </div>
+          <p className="mt-1.5 text-[11px] text-slate-500">
+            {t('set.modelLockDesc')}
+          </p>
         </div>
 
         {/* API Key */}
         <div>
           <div className="flex justify-between items-end mb-1.5">
             <label className="block text-[13px] font-medium text-slate-700">
-              {provider.name} API 密钥
+              {t('set.apiKeyLabel', { provider: provider.name })}
             </label>
-            {appSettings.isSaved && (
+            {showModifyKey && (
               <button
-                onClick={() => onChange({ isSaved: false, apiKey: '' })}
+                onClick={() => {
+                  setEditingApiKey(true);
+                  onChange({ isSaved: false, apiKey: '' });
+                }}
                 className="text-xs text-[#0052D9] hover:underline"
               >
                 {t('set.modifyKey')}
@@ -118,11 +143,11 @@ export function LLMConfig({ appSettings, onChange }: LLMConfigProps) {
             )}
           </div>
           <input
-            type={appSettings.isSaved ? 'text' : 'password'}
+            type={shouldMaskApiKey ? 'text' : 'password'}
             placeholder={provider.keyHint}
-            value={appSettings.isSaved ? '••••••••••••••••••••••••' : appSettings.apiKey}
+            value={shouldMaskApiKey ? '••••••••••••••••••••••••' : appSettings.apiKey}
             onChange={(e) => onChange({ apiKey: e.target.value })}
-            disabled={appSettings.isSaved}
+            disabled={shouldMaskApiKey}
             className="w-full border border-slate-300 rounded-md px-3 py-2 text-sm focus:border-[#0052D9] focus:ring-1 focus:ring-[#0052D9] outline-none disabled:bg-slate-50 disabled:text-slate-400"
           />
           {/* Key acquisition link */}
@@ -132,7 +157,7 @@ export function LLMConfig({ appSettings, onChange }: LLMConfigProps) {
             rel="noopener noreferrer"
             className={`mt-1.5 inline-flex items-center gap-1 text-[11px] ${provider.color} hover:underline`}
           >
-            <ExternalLink size={10} /> 获取 {provider.name} API 密钥 ({provider.keyLabel})
+            <ExternalLink size={10} /> {t('set.getApiKey', { provider: provider.name, site: provider.keyLabel })}
           </a>
         </div>
       </div>

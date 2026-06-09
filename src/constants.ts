@@ -6,5 +6,8 @@ export const LANGUAGES: LanguageOption[] = [
   { code: 'fr', label: 'Français', zhLabel: '法语' },
   { code: 'it', label: 'Italiano', zhLabel: '意大利语' },
   { code: 'es', label: 'Español', zhLabel: '西班牙语' },
+  { code: 'nl', label: 'Nederlands', zhLabel: '荷兰语' },
+  { code: 'pl', label: 'Polski', zhLabel: '波兰语' },
+  { code: 'sv', label: 'Svenska', zhLabel: '瑞典语' },
   { code: 'zh', label: '中文', zhLabel: '中文' },
 ];

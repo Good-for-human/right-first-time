@@ -1,14 +1,16 @@
 import { create } from 'zustand';
-import type { KeywordMap, KeywordSet, CategoryRefAsinMap } from '@/types';
+import type { KeywordMap, KeywordSet, CategoryRefAsinMap, SharedKeywordLibraryItem, CountryCode } from '@/types';
 import { fsSetKeywords, fsSetCategoryRefAsins } from '@/services/firestoreService';
 
 interface KeywordsState {
   keywords: KeywordMap;
   categoryRefAsins: CategoryRefAsinMap;
+  sharedKeywordLibrary: Partial<Record<CountryCode, SharedKeywordLibraryItem>>;
 
   // Bulk setters — used by the Firestore onSnapshot sync hook
   setKeywords: (map: KeywordMap) => void;
   setCategoryRefAsins: (refAsins: CategoryRefAsinMap) => void;
+  setSharedKeywordLibrary: (library: Partial<Record<CountryCode, SharedKeywordLibraryItem>>) => void;
 
   // Keyword set CRUD
   setKeywordSet: (category: string, set: KeywordSet) => void;
@@ -24,9 +26,11 @@ interface KeywordsState {
 export const useKeywordsStore = create<KeywordsState>()((set, get) => ({
   keywords: {},
   categoryRefAsins: {},
+  sharedKeywordLibrary: {},
 
   setKeywords: (map) => set({ keywords: map }),
   setCategoryRefAsins: (refAsins) => set({ categoryRefAsins: refAsins }),
+  setSharedKeywordLibrary: (library) => set({ sharedKeywordLibrary: library }),
 
   setKeywordSet: (category, kwSet) => {
     const updated = { ...get().keywords, [category]: kwSet };

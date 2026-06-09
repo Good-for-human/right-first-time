@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
+import { getStorage } from 'firebase/storage';
 
 const firebaseConfig = {
   apiKey: 'AIzaSyB37JwlJAILYNwc-L1b4_WpcjGqGYav3Og',
@@ -13,5 +14,13 @@ const firebaseConfig = {
 };
 
 export const firebaseApp = initializeApp(firebaseConfig);
-export const db   = getFirestore(firebaseApp);
-export const auth = getAuth(firebaseApp);
+export const db      = getFirestore(firebaseApp);
+export const auth    = getAuth(firebaseApp);
+export const storage = getStorage(firebaseApp);
+
+// Tighten the Storage SDK retry budgets. Defaults are 2 min (operations) and
+// 10 min (uploads) — far too long when the underlying error is a hard
+// configuration failure (CORS / Storage Rules), since we'd just hang the UI.
+// 15 s gives one retry pass and surfaces the real error fast.
+storage.maxOperationRetryTime = 15_000;
+storage.maxUploadRetryTime    = 15_000;

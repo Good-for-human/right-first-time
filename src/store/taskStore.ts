@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { getLanguageForCountry } from '@/lib/countryLanguage';
 import type {
   Task,
   TaskStatus,
@@ -8,6 +9,14 @@ import type {
   TranslationMap,
 } from '@/types';
 import { fsSetTask, fsDeleteTask } from '@/services/firestoreService';
+
+function enforceTaskCountryLanguage(task: Task): Task {
+  if (!task.countryCode) return task;
+  return {
+    ...task,
+    language: getLanguageForCountry(task.countryCode),
+  };
+}
 
 // Per-task generated content cache (in-memory only, not synced to Firestore)
 export interface TaskContent {
@@ -58,8 +67,9 @@ export const useTaskStore = create<TaskState>()((set, get) => ({
 
   // ── Task mutations ───────────────────────────────────────
   addTask: (task) => {
-    set((state) => ({ tasks: [task, ...state.tasks] }));
-    fsSetTask(task);
+    const normalized = enforceTaskCountryLanguage(task);
+    set((state) => ({ tasks: [normalized, ...state.tasks] }));
+    fsSetTask(normalized);
   },
 
   updateTask: (id, updates) => {
@@ -67,7 +77,7 @@ export const useTaskStore = create<TaskState>()((set, get) => ({
       tasks: state.tasks.map((t) => (t.id === id ? { ...t, ...updates } : t)),
     }));
     const updated = get().tasks.find((t) => t.id === id);
-    if (updated) fsSetTask(updated);
+    if (updated) fsSetTask(enforceTaskCountryLanguage(updated));
   },
 
   removeTask: (id) => {
@@ -88,7 +98,7 @@ export const useTaskStore = create<TaskState>()((set, get) => ({
       tasks: state.tasks.map((t) => (t.id === id ? { ...t, status } : t)),
     }));
     const updated = get().tasks.find((t) => t.id === id);
-    if (updated) fsSetTask(updated);
+    if (updated) fsSetTask(enforceTaskCountryLanguage(updated));
   },
 
   setTaskContent: (taskId, content) =>
